@@ -16,6 +16,14 @@ export interface RecurringExpense {
   name: string;
   amount: number;
   frequency: ExpenseFrequency;
+  nextDueDate: string;  // ISO date (YYYY-MM-DD) - anchor for recurring pattern
+}
+
+export interface ExpenseOccurrence {
+  expenseId: string;
+  name: string;
+  amount: number;
+  date: Date;
 }
 
 export interface BudgetConfig {
@@ -36,6 +44,7 @@ export interface ProjectionEntry {
   periodNumber: number;
   income: number;
   expenses: number;
+  expenseDetails: ExpenseOccurrence[];  // Breakdown of expenses hitting this period
   baselineSpend: number;
   balanceAfterIncome: number;
   balanceAfterExpenses: number;

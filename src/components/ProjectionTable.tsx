@@ -83,7 +83,23 @@ export function ProjectionTable({ data, savingsGoal }: ProjectionTableProps) {
                     +{formatCurrency(entry.income)}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-right text-red-600">
-                    -{formatCurrency(entry.expenses)}
+                    <span
+                      className={entry.expenseDetails.length > 0 ? 'cursor-help' : ''}
+                      title={
+                        entry.expenseDetails.length > 0
+                          ? entry.expenseDetails
+                              .map((e) => `${e.name}: ${formatCurrency(e.amount)} (${format(e.date, 'MMM d')})`)
+                              .join('\n')
+                          : undefined
+                      }
+                    >
+                      -{formatCurrency(entry.expenses)}
+                      {entry.expenseDetails.length > 0 && (
+                        <span className="text-gray-400 ml-1 text-xs">
+                          ({entry.expenseDetails.length})
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-right text-orange-600">
                     -{formatCurrency(entry.baselineSpend)}

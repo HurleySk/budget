@@ -23,6 +23,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
     name: '',
     amount: '',
     frequency: 'monthly' as ExpenseFrequency,
+    nextDueDate: new Date().toISOString().split('T')[0],
   });
 
   const updateField = <K extends keyof BudgetConfig>(
@@ -33,17 +34,23 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
   };
 
   const handleAddExpense = () => {
-    if (!newExpense.name || !newExpense.amount) return;
+    if (!newExpense.name || !newExpense.amount || !newExpense.nextDueDate) return;
 
     const expense: RecurringExpense = {
       id: crypto.randomUUID(),
       name: newExpense.name,
       amount: parseFloat(newExpense.amount),
       frequency: newExpense.frequency,
+      nextDueDate: newExpense.nextDueDate,
     };
 
     updateField('recurringExpenses', [...config.recurringExpenses, expense]);
-    setNewExpense({ name: '', amount: '', frequency: 'monthly' });
+    setNewExpense({
+      name: '',
+      amount: '',
+      frequency: 'monthly',
+      nextDueDate: new Date().toISOString().split('T')[0],
+    });
   };
 
   const handleDeleteExpense = (id: string) => {
@@ -317,14 +324,14 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                 className="flex items-center justify-between p-3 bg-gray-50 rounded-md"
               >
                 {editingExpense === expense.id ? (
-                  <div className="flex-1 flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-2 flex-wrap">
                     <input
                       type="text"
                       value={expense.name}
                       onChange={(e) =>
                         handleUpdateExpense(expense.id, { name: e.target.value })
                       }
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                      className="flex-1 min-w-[100px] px-2 py-1 border border-gray-300 rounded text-sm"
                     />
                     <input
                       type="number"
@@ -354,6 +361,14 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                         )
                       )}
                     </select>
+                    <input
+                      type="date"
+                      value={expense.nextDueDate}
+                      onChange={(e) =>
+                        handleUpdateExpense(expense.id, { nextDueDate: e.target.value })
+                      }
+                      className="px-2 py-1 border border-gray-300 rounded text-sm"
+                    />
                     <button
                       onClick={() => setEditingExpense(null)}
                       className="px-2 py-1 text-sm text-blue-600 hover:text-blue-800"
@@ -368,6 +383,9 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       <span className="text-gray-500 ml-2">
                         ${expense.amount.toFixed(2)}{' '}
                         {EXPENSE_FREQUENCY_LABELS[expense.frequency].toLowerCase()}
+                      </span>
+                      <span className="text-gray-400 ml-2 text-sm">
+                        (next: {new Date(expense.nextDueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -392,8 +410,8 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
         )}
 
         {/* Add New Expense */}
-        <div className="flex items-end gap-2 pt-3 border-t border-gray-200">
-          <div className="flex-1">
+        <div className="flex items-end gap-2 pt-3 border-t border-gray-200 flex-wrap">
+          <div className="flex-1 min-w-[120px]">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Name
             </label>
@@ -407,7 +425,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
               placeholder="e.g., Rent"
             />
           </div>
-          <div className="w-28">
+          <div className="w-24">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Amount
             </label>
@@ -422,7 +440,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
               step="0.01"
             />
           </div>
-          <div className="w-32">
+          <div className="w-28">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Frequency
             </label>
@@ -443,9 +461,22 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
               ))}
             </select>
           </div>
+          <div className="w-36">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Next Due Date
+            </label>
+            <input
+              type="date"
+              value={newExpense.nextDueDate}
+              onChange={(e) =>
+                setNewExpense((prev) => ({ ...prev, nextDueDate: e.target.value }))
+              }
+              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+          </div>
           <button
             onClick={handleAddExpense}
-            disabled={!newExpense.name || !newExpense.amount}
+            disabled={!newExpense.name || !newExpense.amount || !newExpense.nextDueDate}
             className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             Add

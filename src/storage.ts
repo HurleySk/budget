@@ -1,7 +1,7 @@
 import type { BudgetConfig } from './types';
 
-// Bumped version to v3 to clear old incompatible configs (added monthlyConfig)
-const STORAGE_KEY = 'budget-app-config-v3';
+// v4: expenses now have nextDueDate for date-based scheduling
+const STORAGE_KEY = 'budget-app-config-v4';
 
 export function saveBudget(config: BudgetConfig): void {
   try {

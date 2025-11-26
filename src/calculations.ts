@@ -1,4 +1,4 @@
-import { addDays, addWeeks, differenceInDays, parseISO } from 'date-fns';
+import { addDays, addWeeks, addMonths, addYears, differenceInDays, parseISO, startOfDay, isBefore, isAfter } from 'date-fns';
 import type {
   BudgetConfig,
   PayFrequency,
@@ -9,6 +9,7 @@ import type {
   WeekendHandling,
   SemiMonthlyConfig,
   MonthlyConfig,
+  ExpenseOccurrence,
 } from './types';
 
 // Convert frequency to monthly multiplier
@@ -180,6 +181,154 @@ export function generatePayDates(
 }
 
 /**
+ * Adjust day of month to fit within a given month (handles 31st in Feb, etc.)
+ */
+function adjustDayForMonth(year: number, month: number, originalDay: number): number {
+  const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+  return Math.min(originalDay, lastDayOfMonth);
+}
+
+/**
+ * Get the next occurrence of an expense on or after a start date
+ */
+function getFirstOccurrenceOnOrAfter(
+  expense: RecurringExpense,
+  startDate: Date
+): Date {
+  const anchorDate = startOfDay(parseISO(expense.nextDueDate));
+  const start = startOfDay(startDate);
+  const originalDay = anchorDate.getDate();
+
+  // If anchor is on or after start, use it directly
+  if (!isBefore(anchorDate, start)) {
+    return anchorDate;
+  }
+
+  // Calculate forward from anchor until we reach/pass startDate
+  let current = anchorDate;
+
+  while (isBefore(current, start)) {
+    switch (expense.frequency) {
+      case 'weekly':
+        current = addWeeks(current, 1);
+        break;
+      case 'biweekly':
+        current = addWeeks(current, 2);
+        break;
+      case 'monthly': {
+        const nextMonth = addMonths(current, 1);
+        const adjustedDay = adjustDayForMonth(nextMonth.getFullYear(), nextMonth.getMonth(), originalDay);
+        current = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), adjustedDay);
+        break;
+      }
+      case 'quarterly': {
+        const nextQuarter = addMonths(current, 3);
+        const adjustedDay = adjustDayForMonth(nextQuarter.getFullYear(), nextQuarter.getMonth(), originalDay);
+        current = new Date(nextQuarter.getFullYear(), nextQuarter.getMonth(), adjustedDay);
+        break;
+      }
+      case 'yearly': {
+        const nextYear = addYears(current, 1);
+        const adjustedDay = adjustDayForMonth(nextYear.getFullYear(), nextYear.getMonth(), originalDay);
+        current = new Date(nextYear.getFullYear(), nextYear.getMonth(), adjustedDay);
+        break;
+      }
+    }
+  }
+
+  return current;
+}
+
+/**
+ * Calculate the next occurrence date based on frequency
+ */
+function getNextOccurrence(
+  currentDate: Date,
+  frequency: ExpenseFrequency,
+  originalDayOfMonth: number
+): Date {
+  switch (frequency) {
+    case 'weekly':
+      return addWeeks(currentDate, 1);
+    case 'biweekly':
+      return addWeeks(currentDate, 2);
+    case 'monthly': {
+      const nextMonth = addMonths(currentDate, 1);
+      const adjustedDay = adjustDayForMonth(nextMonth.getFullYear(), nextMonth.getMonth(), originalDayOfMonth);
+      return new Date(nextMonth.getFullYear(), nextMonth.getMonth(), adjustedDay);
+    }
+    case 'quarterly': {
+      const nextQuarter = addMonths(currentDate, 3);
+      const adjustedDay = adjustDayForMonth(nextQuarter.getFullYear(), nextQuarter.getMonth(), originalDayOfMonth);
+      return new Date(nextQuarter.getFullYear(), nextQuarter.getMonth(), adjustedDay);
+    }
+    case 'yearly': {
+      const nextYear = addYears(currentDate, 1);
+      const adjustedDay = adjustDayForMonth(nextYear.getFullYear(), nextYear.getMonth(), originalDayOfMonth);
+      return new Date(nextYear.getFullYear(), nextYear.getMonth(), adjustedDay);
+    }
+  }
+}
+
+/**
+ * Generate all expense occurrences within a date range
+ */
+export function generateExpenseOccurrences(
+  expenses: RecurringExpense[],
+  rangeStart: Date,
+  rangeEnd: Date
+): ExpenseOccurrence[] {
+  const occurrences: ExpenseOccurrence[] = [];
+  const start = startOfDay(rangeStart);
+  const end = startOfDay(rangeEnd);
+
+  for (const expense of expenses) {
+    // Skip expenses without nextDueDate (shouldn't happen, but be safe)
+    if (!expense.nextDueDate) continue;
+
+    // Find the first occurrence on or after rangeStart
+    let currentDate = getFirstOccurrenceOnOrAfter(expense, start);
+    const originalDay = parseISO(expense.nextDueDate).getDate();
+
+    // Generate all occurrences within the range
+    while (!isAfter(currentDate, end)) {
+      occurrences.push({
+        expenseId: expense.id,
+        name: expense.name,
+        amount: expense.amount,
+        date: currentDate,
+      });
+
+      currentDate = getNextOccurrence(currentDate, expense.frequency, originalDay);
+    }
+  }
+
+  // Sort by date, then by expense name for consistent ordering
+  return occurrences.sort((a, b) => {
+    const dateCompare = a.date.getTime() - b.date.getTime();
+    if (dateCompare !== 0) return dateCompare;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Get expenses that fall between two dates (for a pay period)
+ */
+function getExpensesBetweenDates(
+  occurrences: ExpenseOccurrence[],
+  periodStart: Date,
+  periodEnd: Date
+): ExpenseOccurrence[] {
+  const start = startOfDay(periodStart);
+  const end = startOfDay(periodEnd);
+
+  return occurrences.filter((occ) => {
+    const occDate = startOfDay(occ.date);
+    return !isBefore(occDate, start) && !isAfter(occDate, end);
+  });
+}
+
+/**
  * Calculate monthly expense total from all recurring expenses
  */
 export function getMonthlyExpenseTotal(expenses: RecurringExpense[]): number {
@@ -214,13 +363,11 @@ export function getNetPerPeriod(config: BudgetConfig): number {
 /**
  * Generate projection entries until goal is reached + 3 months
  * Max projection: 5 years to prevent infinite loops
+ *
+ * Expenses are now calculated based on actual due dates, not averaged.
  */
 export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
   const entries: ProjectionEntry[] = [];
-  const expensesPerPeriod = getExpensesPerPeriod(
-    config.recurringExpenses,
-    config.paycheckFrequency
-  );
 
   // Track balance in each scenario
   let balanceAfterIncome = config.currentBalance;
@@ -236,14 +383,39 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
   // Generate actual pay dates
   const payDates = generatePayDates(config, maxPeriods);
 
+  if (payDates.length === 0) return entries;
+
+  // Pre-generate all expense occurrences for the entire projection range
+  // Add buffer for final period
+  const projectionEnd = addMonths(payDates[payDates.length - 1], 1);
+  const allExpenseOccurrences = generateExpenseOccurrences(
+    config.recurringExpenses,
+    payDates[0],
+    projectionEnd
+  );
+
   for (let period = 0; period < payDates.length; period++) {
     const periodDate = payDates[period];
+
+    // Determine period boundaries
+    // Period starts day after previous payday (or from projection start for first period)
+    // Period ends on this payday (inclusive)
+    const periodStart = period === 0 ? payDates[0] : addDays(payDates[period - 1], 1);
+    const periodEnd = periodDate;
+
+    // Get expenses that fall within this pay period
+    const periodExpenses = getExpensesBetweenDates(
+      allExpenseOccurrences,
+      periodStart,
+      periodEnd
+    );
+    const expenseTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Add income
     balanceAfterIncome += config.paycheckAmount;
 
-    // After expenses (income minus recurring expenses)
-    balanceAfterExpenses = balanceAfterIncome - expensesPerPeriod;
+    // After expenses (income minus recurring expenses for this period)
+    balanceAfterExpenses = balanceAfterIncome - expenseTotal;
 
     // After baseline (all spending)
     balanceAfterBaseline = balanceAfterExpenses - config.baselineSpendPerPeriod;
@@ -252,7 +424,8 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
       date: periodDate,
       periodNumber: period + 1,
       income: config.paycheckAmount,
-      expenses: expensesPerPeriod,
+      expenses: expenseTotal,
+      expenseDetails: periodExpenses,
       baselineSpend: config.baselineSpendPerPeriod,
       balanceAfterIncome,
       balanceAfterExpenses,
