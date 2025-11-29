@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { BudgetConfig, AdHocTransaction } from './types';
 import { DEFAULT_CONFIG } from './types';
 import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates } from './calculations';
@@ -8,6 +8,7 @@ import { ProjectionChart } from './components/ProjectionChart';
 import { ProjectionTable } from './components/ProjectionTable';
 import { PeriodDetail } from './components/PeriodDetail';
 import { BottomNav } from './components/BottomNav';
+import { Toast } from './components/Toast';
 import { useCurrentDay } from './hooks/useCurrentDay';
 import { useIsDesktop } from './hooks/useMediaQuery';
 
@@ -18,9 +19,16 @@ function App() {
   const [view, setView] = useState<ViewMode>('chart');
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   // Track current day - updates automatically at midnight
   const { currentDay, forceRefresh } = useCurrentDay();
+
+  // Wrapped refresh handler that shows toast
+  const handleRefresh = useCallback(() => {
+    forceRefresh();
+    setShowToast(true);
+  }, [forceRefresh]);
 
   // Track if we're on desktop (md breakpoint)
   const isDesktop = useIsDesktop();
@@ -119,7 +127,7 @@ function App() {
               </div>
             </div>
             <button
-              onClick={forceRefresh}
+              onClick={handleRefresh}
               className="w-10 h-10 rounded-lg bg-primary-700/50 hover:bg-primary-600/50 flex items-center justify-center transition-colors"
               title="Refresh projections"
             >
@@ -300,6 +308,13 @@ function App() {
       {selectedPeriod === null && (
         <BottomNav view={view} onViewChange={setView} />
       )}
+
+      {/* Toast notification */}
+      <Toast
+        message="Projections refreshed"
+        isVisible={showToast}
+        onClose={() => setShowToast(false)}
+      />
     </div>
   );
 }

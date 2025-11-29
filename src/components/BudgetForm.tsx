@@ -223,7 +223,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       firstPayDay: parseInt(e.target.value),
                     })
                   }
-                  className="px-4 py-2 border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                  className="px-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
                 >
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <option key={day} value={day}>
@@ -242,7 +242,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       secondPayDay: parseInt(e.target.value),
                     })
                   }
-                  className="px-4 py-2 border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                  className="px-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
                 >
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <option key={day} value={day}>
@@ -270,7 +270,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       payDay: parseInt(e.target.value),
                     })
                   }
-                  className="px-4 py-2 border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                  className="px-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
                 >
                   {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
                     <option key={day} value={day}>
@@ -360,7 +360,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                             frequency: e.target.value as ExpenseFrequency,
                           })
                         }
-                        className="flex-1 px-3 py-2 border border-neutral-300 rounded-lg text-sm md:flex-none"
+                        className="flex-1 px-3 py-2.5 border border-neutral-300 rounded-lg text-sm md:flex-none"
                       >
                         {Object.entries(EXPENSE_FREQUENCY_LABELS).map(
                           ([value, label]) => (
@@ -459,7 +459,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                 step="0.01"
               />
             </div>
-            <div className="md:w-32">
+            <div className="md:w-36">
               <label className="block text-xs font-medium text-neutral-600 mb-1">
                 Frequency
               </label>
