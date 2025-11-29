@@ -116,28 +116,31 @@ export function ProjectionChart({ data, savingsGoal }: ProjectionChartProps) {
           )}
 
           {/* Balance lines - using stepAfter to show discrete changes at pay period boundaries */}
+          {/* Different stroke patterns ensure lines are distinguishable even when values overlap */}
           <Line
             type="stepAfter"
             dataKey="afterIncome"
-            stroke="#3b82f6"
-            strokeWidth={2}
-            dot={{ r: 3, fill: '#3b82f6' }}
-            activeDot={{ r: 5 }}
+            stroke="#2563eb"
+            strokeWidth={3}
+            dot={{ r: 4, fill: '#2563eb' }}
+            activeDot={{ r: 6 }}
           />
           <Line
             type="stepAfter"
             dataKey="afterExpenses"
-            stroke="#f59e0b"
+            stroke="#d97706"
             strokeWidth={2}
-            dot={{ r: 3, fill: '#f59e0b' }}
+            strokeDasharray="8 4"
+            dot={{ r: 3, fill: '#d97706', strokeWidth: 2, stroke: '#d97706' }}
             activeDot={{ r: 5 }}
           />
           <Line
             type="stepAfter"
             dataKey="afterBaseline"
-            stroke="#8b5cf6"
+            stroke="#9333ea"
             strokeWidth={2}
-            dot={{ r: 3, fill: '#8b5cf6' }}
+            strokeDasharray="3 3"
+            dot={{ r: 3, fill: '#9333ea', strokeWidth: 2, stroke: '#9333ea' }}
             activeDot={{ r: 5 }}
           />
         </LineChart>

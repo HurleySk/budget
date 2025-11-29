@@ -385,12 +385,14 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
 
   if (payDates.length === 0) return entries;
 
+  const today = new Date();
+
   // Pre-generate all expense occurrences for the entire projection range
   // Add buffer for final period
   const projectionEnd = addMonths(payDates[payDates.length - 1], 1);
   const allExpenseOccurrences = generateExpenseOccurrences(
     config.recurringExpenses,
-    payDates[0],
+    today,  // Start from today to catch any expenses before first paycheck
     projectionEnd
   );
 
@@ -398,34 +400,51 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
     const periodDate = payDates[period];
 
     // Determine period boundaries
-    // Period starts day after previous payday (or from projection start for first period)
-    // Period ends on this payday (inclusive)
-    const periodStart = period === 0 ? payDates[0] : addDays(payDates[period - 1], 1);
-    const periodEnd = periodDate;
+    // Expenses assigned to the paycheck that funds them
+    // Period covers: this payday (inclusive) to next payday (exclusive)
+    const periodStart = periodDate;
+    const periodEnd = period < payDates.length - 1
+      ? addDays(payDates[period + 1], -1)  // Day before next payday
+      : addMonths(periodDate, 1);          // Buffer for last period
 
-    // Get expenses that fall within this pay period
+    // Get recurring expenses that fall within this pay period
     const periodExpenses = getExpensesBetweenDates(
       allExpenseOccurrences,
       periodStart,
       periodEnd
     );
-    const expenseTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const recurringExpenseTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-    // Add income
-    balanceAfterIncome += config.paycheckAmount;
+    // Get ad-hoc transactions for this period
+    const periodNumber = period + 1;
+    const adHocTransactions = config.adHocTransactions ?? [];
+    const periodAdHocs = adHocTransactions.filter(t => t.periodNumber === periodNumber);
+    const adHocIncomeTotal = periodAdHocs
+      .filter(t => t.isIncome)
+      .reduce((sum, t) => sum + t.amount, 0);
+    const adHocExpenseTotal = periodAdHocs
+      .filter(t => !t.isIncome)
+      .reduce((sum, t) => sum + t.amount, 0);
 
-    // After expenses (income minus recurring expenses for this period)
-    balanceAfterExpenses = balanceAfterIncome - expenseTotal;
+    // Add income (paycheck + ad-hoc income)
+    balanceAfterIncome += config.paycheckAmount + adHocIncomeTotal;
+
+    // After expenses (income minus recurring expenses and ad-hoc expenses)
+    const totalExpenses = recurringExpenseTotal + adHocExpenseTotal;
+    balanceAfterExpenses = balanceAfterIncome - totalExpenses;
 
     // After baseline (all spending)
     balanceAfterBaseline = balanceAfterExpenses - config.baselineSpendPerPeriod;
 
     entries.push({
       date: periodDate,
-      periodNumber: period + 1,
+      periodNumber,
       income: config.paycheckAmount,
-      expenses: expenseTotal,
+      expenses: recurringExpenseTotal,
       expenseDetails: periodExpenses,
+      adHocIncome: adHocIncomeTotal,
+      adHocExpenses: adHocExpenseTotal,
+      adHocDetails: periodAdHocs,
       baselineSpend: config.baselineSpendPerPeriod,
       balanceAfterIncome,
       balanceAfterExpenses,

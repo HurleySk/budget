@@ -1,31 +1,32 @@
 import type { BudgetConfig } from './types';
 
-// v4: expenses now have nextDueDate for date-based scheduling
-const STORAGE_KEY = 'budget-app-config-v4';
-
-export function saveBudget(config: BudgetConfig): void {
+/**
+ * Save config to JSON file via dev server
+ */
+export async function saveBudget(config: BudgetConfig): Promise<void> {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    await fetch('/__save-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config, null, 2),
+    });
   } catch (error) {
     console.error('Failed to save budget config:', error);
   }
 }
 
-export function loadBudget(): BudgetConfig | null {
+/**
+ * Load config from JSON file via dev server
+ */
+export async function loadBudget(): Promise<BudgetConfig | null> {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return null;
-    return JSON.parse(saved) as BudgetConfig;
+    const response = await fetch('/__load-config');
+    if (response.ok) {
+      return await response.json();
+    }
+    return null;
   } catch (error) {
     console.error('Failed to load budget config:', error);
     return null;
-  }
-}
-
-export function clearBudget(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.error('Failed to clear budget config:', error);
   }
 }

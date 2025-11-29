@@ -26,6 +26,14 @@ export interface ExpenseOccurrence {
   date: Date;
 }
 
+export interface AdHocTransaction {
+  id: string;
+  periodNumber: number;  // Which period this applies to (1-based)
+  name: string;
+  amount: number;        // Always positive
+  isIncome: boolean;     // true = income, false = expense
+}
+
 export interface BudgetConfig {
   currentBalance: number;
   paycheckAmount: number;
@@ -35,6 +43,7 @@ export interface BudgetConfig {
   semiMonthlyConfig: SemiMonthlyConfig;  // Pay days for semi-monthly
   monthlyConfig: MonthlyConfig;     // Pay day for monthly
   recurringExpenses: RecurringExpense[];
+  adHocTransactions: AdHocTransaction[];
   baselineSpendPerPeriod: number;
   savingsGoal: number;
 }
@@ -44,7 +53,10 @@ export interface ProjectionEntry {
   periodNumber: number;
   income: number;
   expenses: number;
-  expenseDetails: ExpenseOccurrence[];  // Breakdown of expenses hitting this period
+  expenseDetails: ExpenseOccurrence[];  // Breakdown of recurring expenses
+  adHocIncome: number;                  // Total ad-hoc income for this period
+  adHocExpenses: number;                // Total ad-hoc expenses for this period
+  adHocDetails: AdHocTransaction[];     // Ad-hoc transactions for this period
   baselineSpend: number;
   balanceAfterIncome: number;
   balanceAfterExpenses: number;
@@ -73,6 +85,7 @@ export const DEFAULT_CONFIG: BudgetConfig = {
     payDay: 1,
   },
   recurringExpenses: [],
+  adHocTransactions: [],
   baselineSpendPerPeriod: 0,
   savingsGoal: 0,
 };

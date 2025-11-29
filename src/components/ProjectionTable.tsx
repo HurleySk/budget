@@ -5,9 +5,10 @@ import { formatCurrency } from '../calculations';
 interface ProjectionTableProps {
   data: ProjectionEntry[];
   savingsGoal: number;
+  onSelectPeriod: (periodNumber: number) => void;
 }
 
-export function ProjectionTable({ data, savingsGoal }: ProjectionTableProps) {
+export function ProjectionTable({ data, savingsGoal, onSelectPeriod }: ProjectionTableProps) {
   if (data.length === 0) {
     return (
       <div className="bg-white p-8 rounded-lg shadow text-center text-gray-500">
@@ -68,19 +69,31 @@ export function ProjectionTable({ data, savingsGoal }: ProjectionTableProps) {
                 ? 'bg-red-50'
                 : '';
 
+              const hasAdHoc = (entry.adHocDetails ?? []).length > 0;
+
               return (
-                <tr key={entry.periodNumber} className={rowClass}>
+                <tr
+                  key={entry.periodNumber}
+                  className={`${rowClass} cursor-pointer hover:bg-gray-100 transition-colors`}
+                  onClick={() => onSelectPeriod(entry.periodNumber)}
+                >
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                     {entry.periodNumber}
                     {isGoalReached && (
                       <span className="ml-2 text-green-600">★</span>
+                    )}
+                    {hasAdHoc && (
+                      <span className="ml-1 text-blue-500" title="Has one-time transactions">●</span>
                     )}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
                     {format(entry.date, 'MMM d, yyyy')}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-right text-green-600">
-                    +{formatCurrency(entry.income)}
+                    +{formatCurrency(entry.income + (entry.adHocIncome ?? 0))}
+                    {(entry.adHocIncome ?? 0) > 0 && (
+                      <span className="text-blue-500 ml-1 text-xs">*</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-right text-red-600">
                     <span
@@ -93,10 +106,10 @@ export function ProjectionTable({ data, savingsGoal }: ProjectionTableProps) {
                           : undefined
                       }
                     >
-                      -{formatCurrency(entry.expenses)}
-                      {entry.expenseDetails.length > 0 && (
+                      -{formatCurrency(entry.expenses + (entry.adHocExpenses ?? 0))}
+                      {(entry.expenseDetails.length > 0 || (entry.adHocExpenses ?? 0) > 0) && (
                         <span className="text-gray-400 ml-1 text-xs">
-                          ({entry.expenseDetails.length})
+                          ({entry.expenseDetails.length}{(entry.adHocExpenses ?? 0) > 0 ? '*' : ''})
                         </span>
                       )}
                     </span>
