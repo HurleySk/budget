@@ -15,9 +15,11 @@ import {
 interface BudgetFormProps {
   config: BudgetConfig;
   onChange: (config: BudgetConfig) => void;
+  calculatedBaseline: { average: number; count: number } | null;
+  recordedPeriodsCount: number;
 }
 
-export function BudgetForm({ config, onChange }: BudgetFormProps) {
+export function BudgetForm({ config, onChange, calculatedBaseline, recordedPeriodsCount }: BudgetFormProps) {
   const [editingExpense, setEditingExpense] = useState<string | null>(null);
   const [newExpense, setNewExpense] = useState({
     name: '',
@@ -307,14 +309,73 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                 parseFloat(e.target.value) || 0
               )
             }
-            className="w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
+            className={`w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm ${
+              config.useCalculatedBaseline ? 'opacity-50' : ''
+            }`}
             placeholder="0.00"
             step="0.01"
+            disabled={config.useCalculatedBaseline}
           />
         </div>
         <p className="mt-2 text-xs text-neutral-500">
           Discretionary spending (groceries, gas, etc.) per pay period
         </p>
+
+        {/* Calculated Baseline Section */}
+        {(() => {
+          const periodsRequired = config.periodsForBaselineCalc ?? 8;
+          const periodsRemaining = periodsRequired - recordedPeriodsCount;
+
+          if (recordedPeriodsCount >= periodsRequired && calculatedBaseline) {
+            // Show calculated baseline with toggle
+            const diff = calculatedBaseline.average - config.baselineSpendPerPeriod;
+            return (
+              <div className="mt-4 pt-4 border-t border-neutral-200">
+                <div className="p-4 bg-accent-50 rounded-lg border border-accent-200">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-accent-700 mb-2">
+                    Calculated Baseline Available
+                  </p>
+                  <p className="text-sm text-neutral-600 mb-3">
+                    Based on {calculatedBaseline.count} tracked periods:
+                  </p>
+                  <div className="space-y-1 mb-4">
+                    <p className="text-lg font-bold text-accent-800 tabular-nums">
+                      ${calculatedBaseline.average.toFixed(2)} <span className="text-sm font-normal text-accent-600">/ period</span>
+                    </p>
+                    <p className="text-sm text-neutral-600">
+                      Your estimate: ${config.baselineSpendPerPeriod.toFixed(2)}
+                    </p>
+                    {diff !== 0 && (
+                      <p className={`text-sm ${diff > 0 ? 'text-danger-600' : 'text-accent-600'}`}>
+                        Difference: {diff > 0 ? '+' : ''}{diff.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.useCalculatedBaseline ?? false}
+                      onChange={(e) => updateField('useCalculatedBaseline', e.target.checked)}
+                      className="w-5 h-5 text-accent-600 focus:ring-accent-500 rounded"
+                    />
+                    <span className="text-sm font-medium text-neutral-700">
+                      Use calculated baseline
+                    </span>
+                  </label>
+                </div>
+              </div>
+            );
+          } else if (recordedPeriodsCount > 0) {
+            // Show progress
+            return (
+              <p className="mt-3 text-xs text-neutral-500">
+                Track {periodsRemaining} more period{periodsRemaining !== 1 ? 's' : ''} to unlock calculated baseline
+                <span className="text-neutral-400 ml-1">({recordedPeriodsCount}/{periodsRequired})</span>
+              </p>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Recurring Expenses */}

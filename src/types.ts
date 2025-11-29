@@ -34,6 +34,12 @@ export interface AdHocTransaction {
   isIncome: boolean;     // true = income, false = expense
 }
 
+export interface ActualPeriodBalance {
+  periodNumber: number;      // Which period (matches ProjectionEntry)
+  endingBalance: number;     // Actual ending balance
+  recordedAt: string;        // ISO timestamp when entered
+}
+
 export interface BudgetConfig {
   currentBalance: number;
   paycheckAmount: number;
@@ -46,6 +52,10 @@ export interface BudgetConfig {
   adHocTransactions: AdHocTransaction[];
   baselineSpendPerPeriod: number;
   savingsGoal: number;
+  // Actual balance tracking
+  actualPeriodBalances: ActualPeriodBalance[];
+  periodsForBaselineCalc: number;    // Default: 8
+  useCalculatedBaseline: boolean;    // Toggle: use calculated vs manual
 }
 
 export interface ProjectionEntry {
@@ -88,6 +98,9 @@ export const DEFAULT_CONFIG: BudgetConfig = {
   adHocTransactions: [],
   baselineSpendPerPeriod: 0,
   savingsGoal: 0,
+  actualPeriodBalances: [],
+  periodsForBaselineCalc: 8,
+  useCalculatedBaseline: false,
 };
 
 export const WEEKEND_HANDLING_LABELS: Record<WeekendHandling, string> = {

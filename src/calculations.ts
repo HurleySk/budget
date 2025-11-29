@@ -10,6 +10,7 @@ import type {
   SemiMonthlyConfig,
   MonthlyConfig,
   ExpenseOccurrence,
+  ActualPeriodBalance,
 } from './types';
 
 // Convert frequency to monthly multiplier
@@ -378,9 +379,13 @@ function getAverageDaysPerPeriod(frequency: PayFrequency): number {
  *
  * Includes a "period 0" entry for today → next paycheck (partial period).
  * Expenses are calculated based on actual due dates, not averaged.
+ *
+ * @param config The budget configuration
+ * @param baselineOverride Optional baseline to use instead of config.baselineSpendPerPeriod
  */
-export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
+export function generateProjection(config: BudgetConfig, baselineOverride?: number): ProjectionEntry[] {
   const entries: ProjectionEntry[] = [];
+  const effectiveBaseline = baselineOverride ?? config.baselineSpendPerPeriod;
 
   // Max periods: 5 years worth (generous estimate)
   const maxPeriods = 260; // ~5 years of weekly pay
@@ -417,7 +422,7 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
     // Prorated baseline for remaining days (capped at 1.0 to never exceed full period)
     const avgDaysPerPeriod = getAverageDaysPerPeriod(config.paycheckFrequency);
     const baselineProration = Math.min(daysUntilNextPay / avgDaysPerPeriod, 1.0);
-    const proratedBaseline = Math.round(config.baselineSpendPerPeriod * baselineProration * 100) / 100;
+    const proratedBaseline = Math.round(effectiveBaseline * baselineProration * 100) / 100;
 
     // Get expenses between today and next paycheck (exclusive of pay date)
     const partialPeriodExpenses = getExpensesBetweenDates(
@@ -492,7 +497,7 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
     balanceAfterExpenses = balanceAfterIncome - totalExpenses;
 
     // After baseline
-    balanceAfterBaseline = balanceAfterExpenses - config.baselineSpendPerPeriod;
+    balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
     entries.push({
       date: periodDate,
@@ -503,7 +508,7 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
       adHocIncome: adHocIncomeTotal,
       adHocExpenses: adHocExpenseTotal,
       adHocDetails: periodAdHocs,
-      baselineSpend: config.baselineSpendPerPeriod,
+      baselineSpend: effectiveBaseline,
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
@@ -599,6 +604,48 @@ export function formatDate(date: Date): string {
     day: 'numeric',
     year: 'numeric',
   }).format(date);
+}
+
+/**
+ * Calculate average baseline spend from actual period balances.
+ * The actual baseline for a period = balanceAfterExpenses - actualEndingBalance
+ * (i.e., what was actually spent beyond tracked expenses)
+ */
+export function calculateAverageBaseline(
+  actualBalances: ActualPeriodBalance[],
+  projection: ProjectionEntry[]
+): { average: number; count: number } | null {
+  if (!actualBalances || actualBalances.length === 0) return null;
+
+  const baselineSpends: number[] = [];
+
+  for (const actual of actualBalances) {
+    // Skip period 0 (partial period) from calculation
+    if (actual.periodNumber === 0) continue;
+
+    const period = projection.find(p => p.periodNumber === actual.periodNumber);
+    if (!period) continue;
+
+    // Actual baseline = what was spent = balanceAfterExpenses - actualEnding
+    // This represents discretionary spending beyond tracked expenses
+    const actualBaseline = period.balanceAfterExpenses - actual.endingBalance;
+
+    // Only count non-negative values (user might have saved more than expected)
+    if (actualBaseline >= 0) {
+      baselineSpends.push(actualBaseline);
+    } else {
+      // User saved money - count as 0 baseline for this period
+      baselineSpends.push(0);
+    }
+  }
+
+  if (baselineSpends.length === 0) return null;
+
+  const average = baselineSpends.reduce((sum, s) => sum + s, 0) / baselineSpends.length;
+  return {
+    average: Math.round(average * 100) / 100,
+    count: baselineSpends.length
+  };
 }
 
 /**

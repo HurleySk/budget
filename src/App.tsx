@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { BudgetConfig, AdHocTransaction } from './types';
 import { DEFAULT_CONFIG } from './types';
-import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates } from './calculations';
+import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates, calculateAverageBaseline } from './calculations';
 import { saveBudget, loadBudget } from './storage';
 import { BudgetForm } from './components/BudgetForm';
 import { ProjectionChart } from './components/ProjectionChart';
@@ -66,7 +66,23 @@ function App() {
   const projection = useMemo(() => {
     // currentDay is used to trigger recalculation at midnight
     void currentDay;
-    return generateProjection(config);
+    // Use calculated baseline if enabled and we have enough data
+    const useCalc = config.useCalculatedBaseline;
+    const actualBalances = config.actualPeriodBalances ?? [];
+    const periodsRequired = config.periodsForBaselineCalc ?? 8;
+
+    // First generate projection with manual baseline to calculate averages
+    const baseProjection = generateProjection(config);
+
+    // If using calculated baseline and we have enough periods, recalculate with it
+    if (useCalc && actualBalances.length >= periodsRequired) {
+      const calcResult = calculateAverageBaseline(actualBalances, baseProjection);
+      if (calcResult) {
+        return generateProjection(config, calcResult.average);
+      }
+    }
+
+    return baseProjection;
   }, [config, currentDay]);
 
   // Calculate goal dates (memoized)
@@ -109,6 +125,33 @@ function App() {
     }));
   };
 
+  // Actual balance handlers
+  const handleSaveActualBalance = (periodNumber: number, endingBalance: number) => {
+    setConfig(prev => ({
+      ...prev,
+      actualPeriodBalances: [
+        ...(prev.actualPeriodBalances ?? []).filter(a => a.periodNumber !== periodNumber),
+        { periodNumber, endingBalance, recordedAt: new Date().toISOString() }
+      ]
+    }));
+  };
+
+  const handleDeleteActualBalance = (periodNumber: number) => {
+    setConfig(prev => ({
+      ...prev,
+      actualPeriodBalances: (prev.actualPeriodBalances ?? []).filter(
+        a => a.periodNumber !== periodNumber
+      )
+    }));
+  };
+
+  // Calculate average baseline from actual data
+  const calculatedBaseline = useMemo(() => {
+    return calculateAverageBaseline(config.actualPeriodBalances ?? [], projection);
+  }, [config.actualPeriodBalances, projection]);
+
+  const recordedPeriodsCount = (config.actualPeriodBalances ?? []).length;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -149,13 +192,21 @@ function App() {
             onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onBack={() => setSelectedPeriod(null)}
+            actualBalance={(config.actualPeriodBalances ?? []).find(a => a.periodNumber === selectedPeriod)}
+            onSaveActualBalance={handleSaveActualBalance}
+            onDeleteActualBalance={handleDeleteActualBalance}
           />
         ) : (
           /* Main View */
           <>
             {/* Budget Form - Always visible on desktop, conditional on mobile */}
             <div className={`mb-6 ${view !== 'form' ? 'hidden md:block' : ''}`}>
-              <BudgetForm config={config} onChange={setConfig} />
+              <BudgetForm
+                config={config}
+                onChange={setConfig}
+                calculatedBaseline={calculatedBaseline}
+                recordedPeriodsCount={recordedPeriodsCount}
+              />
             </div>
 
             {/* Goal Timeline Summary */}
