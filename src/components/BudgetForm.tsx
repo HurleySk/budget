@@ -70,41 +70,43 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       {/* Current Balance and Savings Goal */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+      <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+        <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
+          <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
             Current Balance
           </label>
           <div className="relative">
-            <span className="absolute left-3 top-2 text-gray-500">$</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
             <input
               type="number"
+              inputMode="decimal"
               value={config.currentBalance || ''}
               onChange={(e) =>
                 updateField('currentBalance', parseFloat(e.target.value) || 0)
               }
-              className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
               placeholder="0.00"
               step="0.01"
             />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
+          <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
             Savings Goal
           </label>
           <div className="relative">
-            <span className="absolute left-3 top-2 text-gray-500">$</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
             <input
               type="number"
+              inputMode="decimal"
               value={config.savingsGoal || ''}
               onChange={(e) =>
                 updateField('savingsGoal', parseFloat(e.target.value) || 0)
               }
-              className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
               placeholder="0.00"
               step="0.01"
             />
@@ -113,24 +115,29 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
       </div>
 
       {/* Paycheck Configuration */}
-      <div className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">Paycheck Configuration</h3>
+      <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
+        <h3 className="text-base font-semibold text-primary-800 mb-4">Paycheck Configuration</h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className={`space-y-4 md:grid md:gap-4 md:space-y-0 mb-4 ${
+          config.paycheckFrequency === 'weekly' || config.paycheckFrequency === 'biweekly'
+            ? 'md:grid-cols-3'
+            : 'md:grid-cols-2'
+        }`}>
           {/* Amount */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
               Amount
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-2 text-gray-500">$</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
               <input
                 type="number"
+                inputMode="decimal"
                 value={config.paycheckAmount || ''}
                 onChange={(e) =>
                   updateField('paycheckAmount', parseFloat(e.target.value) || 0)
                 }
-                className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
                 placeholder="0.00"
                 step="0.01"
               />
@@ -139,7 +146,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
 
           {/* Frequency */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
               Frequency
             </label>
             <select
@@ -147,7 +154,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
               onChange={(e) =>
                 updateField('paycheckFrequency', e.target.value as PayFrequency)
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
             >
               {Object.entries(PAY_FREQUENCY_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -157,29 +164,31 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
             </select>
           </div>
 
-          {/* Next Pay Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Next Paycheck Date
-            </label>
-            <input
-              type="date"
-              value={config.nextPayDate}
-              onChange={(e) => updateField('nextPayDate', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+          {/* Next Pay Date - only shown for weekly/biweekly since monthly/semimonthly specify day of month */}
+          {(config.paycheckFrequency === 'weekly' || config.paycheckFrequency === 'biweekly') && (
+            <div>
+              <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
+                Next Paycheck Date
+              </label>
+              <input
+                type="date"
+                value={config.nextPayDate}
+                onChange={(e) => updateField('nextPayDate', e.target.value)}
+                className="w-full px-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
+              />
+            </div>
+          )}
         </div>
 
         {/* Weekend Handling */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">
             If payday falls on weekend
           </label>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-3 md:gap-4">
             {(Object.entries(WEEKEND_HANDLING_LABELS) as [WeekendHandling, string][]).map(
               ([value, label]) => (
-                <label key={value} className="flex items-center gap-2 cursor-pointer">
+                <label key={value} className="flex items-center gap-2 p-2 -m-2 min-h-[44px] cursor-pointer">
                   <input
                     type="radio"
                     name="weekendHandling"
@@ -188,9 +197,9 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                     onChange={(e) =>
                       updateField('weekendHandling', e.target.value as WeekendHandling)
                     }
-                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                    className="w-5 h-5 text-primary-600 focus:ring-primary-500"
                   />
-                  <span className="text-sm text-gray-700">{label}</span>
+                  <span className="text-sm text-neutral-700">{label}</span>
                 </label>
               )
             )}
@@ -199,13 +208,13 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
 
         {/* Semi-Monthly Pay Days (conditional) */}
         {config.paycheckFrequency === 'semimonthly' && (
-          <div className="p-3 bg-gray-50 rounded-md">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-200">
+            <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-3">
               Semi-Monthly Pay Days
             </label>
             <div className="flex flex-wrap gap-4">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">First pay day</label>
+                <label className="block text-xs text-neutral-500 mb-1">First pay day</label>
                 <select
                   value={config.semiMonthlyConfig.firstPayDay}
                   onChange={(e) =>
@@ -214,7 +223,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       firstPayDay: parseInt(e.target.value),
                     })
                   }
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="px-4 py-2 border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                 >
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <option key={day} value={day}>
@@ -224,7 +233,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Second pay day</label>
+                <label className="block text-xs text-neutral-500 mb-1">Second pay day</label>
                 <select
                   value={config.semiMonthlyConfig.secondPayDay}
                   onChange={(e) =>
@@ -233,7 +242,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       secondPayDay: parseInt(e.target.value),
                     })
                   }
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="px-4 py-2 border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                 >
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <option key={day} value={day}>
@@ -248,8 +257,8 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
 
         {/* Monthly Pay Day (conditional) */}
         {config.paycheckFrequency === 'monthly' && (
-          <div className="p-3 bg-gray-50 rounded-md">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="p-4 bg-neutral-50 rounded-lg border border-neutral-200">
+            <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-3">
               Pay Day of Month
             </label>
             <div className="flex flex-wrap gap-4 items-end">
@@ -261,7 +270,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                       payDay: parseInt(e.target.value),
                     })
                   }
-                  className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="px-4 py-2 border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                 >
                   {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
                     <option key={day} value={day}>
@@ -273,7 +282,7 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
                   <option value={31}>Last day</option>
                 </select>
               </div>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-neutral-500">
                 Days 29-31 will be adjusted to the last day in shorter months
               </p>
             </div>
@@ -282,122 +291,125 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
       </div>
 
       {/* Baseline Spend */}
-      <div className="grid grid-cols-1 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Baseline Spend per Period
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-2 text-gray-500">$</span>
-            <input
-              type="number"
-              value={config.baselineSpendPerPeriod || ''}
-              onChange={(e) =>
-                updateField(
-                  'baselineSpendPerPeriod',
-                  parseFloat(e.target.value) || 0
-                )
-              }
-              className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="0.00"
-              step="0.01"
-            />
-          </div>
-          <p className="mt-2 text-sm text-gray-500">
-            Discretionary spending (groceries, gas, etc.) per pay period
-          </p>
+      <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
+        <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
+          Baseline Spend per Period
+        </label>
+        <div className="relative">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={config.baselineSpendPerPeriod || ''}
+            onChange={(e) =>
+              updateField(
+                'baselineSpendPerPeriod',
+                parseFloat(e.target.value) || 0
+              )
+            }
+            className="w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
+            placeholder="0.00"
+            step="0.01"
+          />
         </div>
+        <p className="mt-2 text-xs text-neutral-500">
+          Discretionary spending (groceries, gas, etc.) per pay period
+        </p>
       </div>
 
       {/* Recurring Expenses */}
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">Recurring Expenses</h3>
+          <h3 className="text-base font-semibold text-primary-800">Recurring Expenses</h3>
         </div>
 
         {/* Existing Expenses */}
-        {config.recurringExpenses.length > 0 && (
+        {config.recurringExpenses.length > 0 ? (
           <div className="space-y-2 mb-4">
             {config.recurringExpenses.map((expense) => (
               <div
                 key={expense.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-md"
+                className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg border border-neutral-100"
               >
                 {editingExpense === expense.id ? (
-                  <div className="flex-1 flex items-center gap-2 flex-wrap">
+                  <div className="flex-1 flex flex-col gap-3 md:flex-row md:items-center md:gap-2 md:flex-wrap">
                     <input
                       type="text"
                       value={expense.name}
                       onChange={(e) =>
                         handleUpdateExpense(expense.id, { name: e.target.value })
                       }
-                      className="flex-1 min-w-[100px] px-2 py-1 border border-gray-300 rounded text-sm"
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm md:flex-1 md:min-w-[100px]"
                     />
-                    <input
-                      type="number"
-                      value={expense.amount}
-                      onChange={(e) =>
-                        handleUpdateExpense(expense.id, {
-                          amount: parseFloat(e.target.value) || 0,
-                        })
-                      }
-                      className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
-                      step="0.01"
-                    />
-                    <select
-                      value={expense.frequency}
-                      onChange={(e) =>
-                        handleUpdateExpense(expense.id, {
-                          frequency: e.target.value as ExpenseFrequency,
-                        })
-                      }
-                      className="px-2 py-1 border border-gray-300 rounded text-sm"
-                    >
-                      {Object.entries(EXPENSE_FREQUENCY_LABELS).map(
-                        ([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        )
-                      )}
-                    </select>
-                    <input
-                      type="date"
-                      value={expense.nextDueDate}
-                      onChange={(e) =>
-                        handleUpdateExpense(expense.id, { nextDueDate: e.target.value })
-                      }
-                      className="px-2 py-1 border border-gray-300 rounded text-sm"
-                    />
-                    <button
-                      onClick={() => setEditingExpense(null)}
-                      className="px-2 py-1 text-sm text-blue-600 hover:text-blue-800"
-                    >
-                      Done
-                    </button>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={expense.amount}
+                        onChange={(e) =>
+                          handleUpdateExpense(expense.id, {
+                            amount: parseFloat(e.target.value) || 0,
+                          })
+                        }
+                        className="flex-1 px-3 py-2 border border-neutral-300 rounded-lg text-sm md:w-24 md:flex-none"
+                        step="0.01"
+                      />
+                      <select
+                        value={expense.frequency}
+                        onChange={(e) =>
+                          handleUpdateExpense(expense.id, {
+                            frequency: e.target.value as ExpenseFrequency,
+                          })
+                        }
+                        className="flex-1 px-3 py-2 border border-neutral-300 rounded-lg text-sm md:flex-none"
+                      >
+                        {Object.entries(EXPENSE_FREQUENCY_LABELS).map(
+                          ([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="date"
+                        value={expense.nextDueDate}
+                        onChange={(e) =>
+                          handleUpdateExpense(expense.id, { nextDueDate: e.target.value })
+                        }
+                        className="flex-1 px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                      />
+                      <button
+                        onClick={() => setEditingExpense(null)}
+                        className="px-3 py-2 text-sm font-medium text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded-lg transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <>
-                    <div className="flex-1">
-                      <span className="font-medium">{expense.name}</span>
-                      <span className="text-gray-500 ml-2">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-neutral-800">{expense.name}</span>
+                      <span className="text-neutral-500 ml-2 tabular-nums">
                         ${expense.amount.toFixed(2)}{' '}
-                        {EXPENSE_FREQUENCY_LABELS[expense.frequency].toLowerCase()}
+                        <span className="text-neutral-400">{EXPENSE_FREQUENCY_LABELS[expense.frequency].toLowerCase()}</span>
                       </span>
-                      <span className="text-gray-400 ml-2 text-sm">
+                      <span className="text-neutral-400 ml-2 text-sm hidden sm:inline">
                         (next: {new Date(expense.nextDueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <button
                         onClick={() => setEditingExpense(expense.id)}
-                        className="text-sm text-blue-600 hover:text-blue-800"
+                        className="px-2 py-1 rounded-md text-xs font-medium text-neutral-600 hover:text-primary-700 hover:bg-primary-50 transition-colors"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteExpense(expense.id)}
-                        className="text-sm text-red-600 hover:text-red-800"
+                        className="px-2 py-1 rounded-md text-xs font-medium text-neutral-600 hover:text-danger-700 hover:bg-danger-50 transition-colors"
                       >
                         Delete
                       </button>
@@ -407,80 +419,88 @@ export function BudgetForm({ config, onChange }: BudgetFormProps) {
               </div>
             ))}
           </div>
+        ) : (
+          <div className="py-6 text-center text-neutral-500 mb-4">
+            <p className="mb-1">No recurring expenses yet</p>
+            <p className="text-xs">Add bills like rent, utilities, subscriptions below</p>
+          </div>
         )}
 
         {/* Add New Expense */}
-        <div className="flex items-end gap-2 pt-3 border-t border-gray-200 flex-wrap">
-          <div className="flex-1 min-w-[120px]">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Name
-            </label>
-            <input
-              type="text"
-              value={newExpense.name}
-              onChange={(e) =>
-                setNewExpense((prev) => ({ ...prev, name: e.target.value }))
-              }
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-              placeholder="e.g., Rent"
-            />
-          </div>
-          <div className="w-24">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Amount
-            </label>
-            <input
-              type="number"
-              value={newExpense.amount}
-              onChange={(e) =>
-                setNewExpense((prev) => ({ ...prev, amount: e.target.value }))
-              }
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-              placeholder="0.00"
-              step="0.01"
-            />
-          </div>
-          <div className="w-28">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Frequency
-            </label>
-            <select
-              value={newExpense.frequency}
-              onChange={(e) =>
-                setNewExpense((prev) => ({
-                  ...prev,
-                  frequency: e.target.value as ExpenseFrequency,
-                }))
-              }
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+        <div className="pt-4 border-t border-neutral-200">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-end md:gap-2">
+            <div className="sm:col-span-2 md:flex-1 md:min-w-[120px]">
+              <label className="block text-xs font-medium text-neutral-600 mb-1">
+                Name
+              </label>
+              <input
+                type="text"
+                value={newExpense.name}
+                onChange={(e) =>
+                  setNewExpense((prev) => ({ ...prev, name: e.target.value }))
+                }
+                className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg text-sm transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                placeholder="e.g., Rent"
+              />
+            </div>
+            <div className="md:w-28">
+              <label className="block text-xs font-medium text-neutral-600 mb-1">
+                Amount
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={newExpense.amount}
+                onChange={(e) =>
+                  setNewExpense((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg text-sm transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                placeholder="0.00"
+                step="0.01"
+              />
+            </div>
+            <div className="md:w-32">
+              <label className="block text-xs font-medium text-neutral-600 mb-1">
+                Frequency
+              </label>
+              <select
+                value={newExpense.frequency}
+                onChange={(e) =>
+                  setNewExpense((prev) => ({
+                    ...prev,
+                    frequency: e.target.value as ExpenseFrequency,
+                  }))
+                }
+                className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg text-sm transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+              >
+                {Object.entries(EXPENSE_FREQUENCY_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:w-40">
+              <label className="block text-xs font-medium text-neutral-600 mb-1">
+                Next Due Date
+              </label>
+              <input
+                type="date"
+                value={newExpense.nextDueDate}
+                onChange={(e) =>
+                  setNewExpense((prev) => ({ ...prev, nextDueDate: e.target.value }))
+                }
+                className="w-full px-3 py-2.5 border border-neutral-300 rounded-lg text-sm transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
+            <button
+              onClick={handleAddExpense}
+              disabled={!newExpense.name || !newExpense.amount || !newExpense.nextDueDate}
+              className="w-full py-3 px-4 bg-primary-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all duration-150 hover:bg-primary-800 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed md:w-auto md:py-2.5"
             >
-              {Object.entries(EXPENSE_FREQUENCY_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              Add
+            </button>
           </div>
-          <div className="w-36">
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Next Due Date
-            </label>
-            <input
-              type="date"
-              value={newExpense.nextDueDate}
-              onChange={(e) =>
-                setNewExpense((prev) => ({ ...prev, nextDueDate: e.target.value }))
-              }
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
-            />
-          </div>
-          <button
-            onClick={handleAddExpense}
-            disabled={!newExpense.name || !newExpense.amount || !newExpense.nextDueDate}
-            className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-          >
-            Add
-          </button>
         </div>
       </div>
     </div>

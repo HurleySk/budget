@@ -361,15 +361,46 @@ export function getNetPerPeriod(config: BudgetConfig): number {
 }
 
 /**
+ * Get average days per pay period for proration calculations
+ */
+function getAverageDaysPerPeriod(frequency: PayFrequency): number {
+  switch (frequency) {
+    case 'weekly': return 7;
+    case 'biweekly': return 14;
+    case 'semimonthly': return 15.22;  // 365.25/24
+    case 'monthly': return 30.44;       // 365.25/12
+  }
+}
+
+/**
  * Generate projection entries until goal is reached + 3 months
  * Max projection: 5 years to prevent infinite loops
  *
- * Expenses are now calculated based on actual due dates, not averaged.
+ * Includes a "period 0" entry for today → next paycheck (partial period).
+ * Expenses are calculated based on actual due dates, not averaged.
  */
 export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
   const entries: ProjectionEntry[] = [];
 
-  // Track balance in each scenario
+  // Max periods: 5 years worth (generous estimate)
+  const maxPeriods = 260; // ~5 years of weekly pay
+
+  // Generate actual pay dates and filter out any in the past
+  const today = startOfDay(new Date());
+  const allPayDates = generatePayDates(config, maxPeriods);
+  const futurePayDates = allPayDates.filter(date => !isBefore(startOfDay(date), today));
+
+  if (futurePayDates.length === 0) return entries;
+
+  // Pre-generate all expense occurrences for the entire projection range
+  const projectionEnd = addMonths(futurePayDates[futurePayDates.length - 1], 1);
+  const allExpenseOccurrences = generateExpenseOccurrences(
+    config.recurringExpenses,
+    today,  // Start from today to catch expenses before first paycheck
+    projectionEnd
+  );
+
+  // Track balances - start from current balance
   let balanceAfterIncome = config.currentBalance;
   let balanceAfterExpenses = config.currentBalance;
   let balanceAfterBaseline = config.currentBalance;
@@ -377,37 +408,69 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
   // Track when goal is reached
   let goalReachedPeriod: number | null = null;
 
-  // Max periods: 5 years worth (generous estimate)
-  const maxPeriods = 260; // ~5 years of weekly pay
+  // === PERIOD 0: Today → Next Paycheck (partial period) ===
+  const nextPayDate = futurePayDates[0];
+  const daysUntilNextPay = differenceInDays(nextPayDate, today);
 
-  // Generate actual pay dates
-  const payDates = generatePayDates(config, maxPeriods);
+  // Only add partial period if there are days before next paycheck
+  if (daysUntilNextPay > 0) {
+    // Prorated baseline for remaining days (capped at 1.0 to never exceed full period)
+    const avgDaysPerPeriod = getAverageDaysPerPeriod(config.paycheckFrequency);
+    const baselineProration = Math.min(daysUntilNextPay / avgDaysPerPeriod, 1.0);
+    const proratedBaseline = Math.round(config.baselineSpendPerPeriod * baselineProration * 100) / 100;
 
-  if (payDates.length === 0) return entries;
+    // Get expenses between today and next paycheck (exclusive of pay date)
+    const partialPeriodExpenses = getExpensesBetweenDates(
+      allExpenseOccurrences,
+      today,
+      addDays(nextPayDate, -1)
+    );
+    const partialExpenseTotal = partialPeriodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const today = new Date();
+    // Get ad-hoc transactions for period 0
+    const adHocTransactions = config.adHocTransactions ?? [];
+    const period0AdHocs = adHocTransactions.filter(t => t.periodNumber === 0);
+    const period0AdHocIncome = period0AdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
+    const period0AdHocExpense = period0AdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
 
-  // Pre-generate all expense occurrences for the entire projection range
-  // Add buffer for final period
-  const projectionEnd = addMonths(payDates[payDates.length - 1], 1);
-  const allExpenseOccurrences = generateExpenseOccurrences(
-    config.recurringExpenses,
-    today,  // Start from today to catch any expenses before first paycheck
-    projectionEnd
-  );
+    // Calculate balances for partial period (no paycheck income)
+    balanceAfterIncome = config.currentBalance + period0AdHocIncome;
+    balanceAfterExpenses = balanceAfterIncome - partialExpenseTotal - period0AdHocExpense;
+    balanceAfterBaseline = balanceAfterExpenses - proratedBaseline;
 
-  for (let period = 0; period < payDates.length; period++) {
-    const periodDate = payDates[period];
+    entries.push({
+      date: today,
+      periodNumber: 0,  // Special "current" period
+      income: 0,
+      expenses: partialExpenseTotal,
+      expenseDetails: partialPeriodExpenses,
+      adHocIncome: period0AdHocIncome,
+      adHocExpenses: period0AdHocExpense,
+      adHocDetails: period0AdHocs,
+      baselineSpend: proratedBaseline,
+      balanceAfterIncome,
+      balanceAfterExpenses,
+      balanceAfterBaseline,
+    });
 
-    // Determine period boundaries
-    // Expenses assigned to the paycheck that funds them
-    // Period covers: this payday (inclusive) to next payday (exclusive)
+    // Check if goal already reached
+    if (balanceAfterBaseline >= config.savingsGoal) {
+      goalReachedPeriod = 0;
+    }
+  }
+
+  // === PERIODS 1+: Regular pay periods ===
+  for (let i = 0; i < futurePayDates.length; i++) {
+    const periodDate = futurePayDates[i];
+    const periodNumber = i + 1;
+
+    // Period boundaries: this payday (inclusive) to next payday (exclusive)
     const periodStart = periodDate;
-    const periodEnd = period < payDates.length - 1
-      ? addDays(payDates[period + 1], -1)  // Day before next payday
-      : addMonths(periodDate, 1);          // Buffer for last period
+    const periodEnd = i < futurePayDates.length - 1
+      ? addDays(futurePayDates[i + 1], -1)
+      : addMonths(periodDate, 1);
 
-    // Get recurring expenses that fall within this pay period
+    // Get recurring expenses for this period
     const periodExpenses = getExpensesBetweenDates(
       allExpenseOccurrences,
       periodStart,
@@ -416,24 +479,19 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
     const recurringExpenseTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Get ad-hoc transactions for this period
-    const periodNumber = period + 1;
     const adHocTransactions = config.adHocTransactions ?? [];
     const periodAdHocs = adHocTransactions.filter(t => t.periodNumber === periodNumber);
-    const adHocIncomeTotal = periodAdHocs
-      .filter(t => t.isIncome)
-      .reduce((sum, t) => sum + t.amount, 0);
-    const adHocExpenseTotal = periodAdHocs
-      .filter(t => !t.isIncome)
-      .reduce((sum, t) => sum + t.amount, 0);
+    const adHocIncomeTotal = periodAdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
+    const adHocExpenseTotal = periodAdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
 
     // Add income (paycheck + ad-hoc income)
-    balanceAfterIncome += config.paycheckAmount + adHocIncomeTotal;
+    balanceAfterIncome = balanceAfterBaseline + config.paycheckAmount + adHocIncomeTotal;
 
-    // After expenses (income minus recurring expenses and ad-hoc expenses)
+    // After expenses
     const totalExpenses = recurringExpenseTotal + adHocExpenseTotal;
     balanceAfterExpenses = balanceAfterIncome - totalExpenses;
 
-    // After baseline (all spending)
+    // After baseline
     balanceAfterBaseline = balanceAfterExpenses - config.baselineSpendPerPeriod;
 
     entries.push({
@@ -451,22 +509,19 @@ export function generateProjection(config: BudgetConfig): ProjectionEntry[] {
       balanceAfterBaseline,
     });
 
-    // Check if goal is reached (using most conservative scenario)
+    // Check if goal is reached
     if (goalReachedPeriod === null && balanceAfterBaseline >= config.savingsGoal) {
-      goalReachedPeriod = period;
+      goalReachedPeriod = i;
     }
 
     // Continue for 3 more months after goal is reached
     if (goalReachedPeriod !== null) {
       const periodsPerMonth = FREQ_TO_MONTHLY[config.paycheckFrequency];
       const extraPeriods = Math.ceil(periodsPerMonth * 3);
-      if (period >= goalReachedPeriod + extraPeriods) {
+      if (i >= goalReachedPeriod + extraPeriods) {
         break;
       }
     }
-
-    // Update running balances for next period
-    balanceAfterIncome = balanceAfterBaseline;
   }
 
   return entries;
@@ -484,18 +539,6 @@ export function calculateGoalDates(
   let dateAfterBaseline: Date | null = null;
   let periodsToGoal = 0;
 
-  // Handle case where goal is already met
-  if (config.currentBalance >= config.savingsGoal) {
-    const today = new Date();
-    return {
-      dateBeforeExpenses: today,
-      dateAfterExpenses: today,
-      dateAfterBaseline: today,
-      periodsToGoal: 0,
-      daysToGoal: 0,
-    };
-  }
-
   // Handle case where no savings goal is set
   if (config.savingsGoal <= 0) {
     return {
@@ -508,6 +551,9 @@ export function calculateGoalDates(
   }
 
   for (const entry of projection) {
+    // Skip partial period (Period 0) - goal should only be based on full periods
+    if (entry.periodNumber === 0) continue;
+
     if (dateBeforeExpenses === null && entry.balanceAfterIncome >= config.savingsGoal) {
       dateBeforeExpenses = entry.date;
     }
@@ -553,4 +599,90 @@ export function formatDate(date: Date): string {
     day: 'numeric',
     year: 'numeric',
   }).format(date);
+}
+
+/**
+ * Advance any dates that have passed to their next occurrence.
+ * Returns a new config if any dates were advanced, or null if no changes needed.
+ */
+export function advancePassedDates(
+  config: BudgetConfig,
+  today: Date
+): BudgetConfig | null {
+  let changed = false;
+  let newConfig = { ...config };
+  const todayStart = startOfDay(today);
+
+  // 1. Advance nextPayDate if it's in the past (for all frequency types)
+  const nextPay = parseISO(config.nextPayDate);
+  if (isBefore(nextPay, todayStart)) {
+    if (config.paycheckFrequency === 'weekly' || config.paycheckFrequency === 'biweekly') {
+      // Weekly/biweekly: advance by interval
+      let current = nextPay;
+      const interval = config.paycheckFrequency === 'weekly' ? 1 : 2;
+      while (isBefore(current, todayStart)) {
+        current = addWeeks(current, interval);
+      }
+      newConfig.nextPayDate = current.toISOString().split('T')[0];
+      changed = true;
+    } else if (config.paycheckFrequency === 'semimonthly') {
+      // Semimonthly: find next pay day on or after today
+      let year = todayStart.getFullYear();
+      let month = todayStart.getMonth();
+
+      outerLoop:
+      for (let i = 0; i < 3; i++) {
+        const payDays = getSemiMonthlyPayDaysForMonth(
+          year, month, config.semiMonthlyConfig, config.weekendHandling
+        );
+        for (const payDay of payDays) {
+          if (!isBefore(payDay, todayStart)) {
+            newConfig.nextPayDate = payDay.toISOString().split('T')[0];
+            changed = true;
+            break outerLoop;
+          }
+        }
+        month++;
+        if (month > 11) { month = 0; year++; }
+      }
+    } else if (config.paycheckFrequency === 'monthly') {
+      // Monthly: find next pay day on or after today
+      let year = todayStart.getFullYear();
+      let month = todayStart.getMonth();
+
+      for (let i = 0; i < 3; i++) {
+        const payDay = getMonthlyPayDayForMonth(
+          year, month, config.monthlyConfig, config.weekendHandling
+        );
+        if (!isBefore(payDay, todayStart)) {
+          newConfig.nextPayDate = payDay.toISOString().split('T')[0];
+          changed = true;
+          break;
+        }
+        month++;
+        if (month > 11) { month = 0; year++; }
+      }
+    }
+  }
+
+  // 2. Advance each recurring expense's nextDueDate if in the past
+  const updatedExpenses = config.recurringExpenses.map((expense) => {
+    const dueDate = parseISO(expense.nextDueDate);
+    if (isBefore(dueDate, todayStart)) {
+      // Use existing logic to find next occurrence on or after today
+      const nextDate = getFirstOccurrenceOnOrAfter(expense, todayStart);
+      changed = true;
+      return {
+        ...expense,
+        nextDueDate: nextDate.toISOString().split('T')[0],
+      };
+    }
+    return expense;
+  });
+
+  if (changed) {
+    newConfig.recurringExpenses = updatedExpenses;
+    return newConfig;
+  }
+  return null;
 }

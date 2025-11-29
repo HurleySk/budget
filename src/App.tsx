@@ -1,20 +1,29 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { BudgetConfig, AdHocTransaction } from './types';
 import { DEFAULT_CONFIG } from './types';
-import { generateProjection, calculateGoalDates, formatCurrency, formatDate } from './calculations';
+import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates } from './calculations';
 import { saveBudget, loadBudget } from './storage';
 import { BudgetForm } from './components/BudgetForm';
 import { ProjectionChart } from './components/ProjectionChart';
 import { ProjectionTable } from './components/ProjectionTable';
 import { PeriodDetail } from './components/PeriodDetail';
+import { BottomNav } from './components/BottomNav';
+import { useCurrentDay } from './hooks/useCurrentDay';
+import { useIsDesktop } from './hooks/useMediaQuery';
 
-type ViewMode = 'chart' | 'table';
+type ViewMode = 'form' | 'chart' | 'table';
 
 function App() {
   const [config, setConfig] = useState<BudgetConfig>(DEFAULT_CONFIG);
   const [view, setView] = useState<ViewMode>('chart');
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
+
+  // Track current day - updates automatically at midnight
+  const { currentDay, forceRefresh } = useCurrentDay();
+
+  // Track if we're on desktop (md breakpoint)
+  const isDesktop = useIsDesktop();
 
   // Load from JSON file on mount
   useEffect(() => {
@@ -33,16 +42,32 @@ function App() {
     }
   }, [config, isLoaded]);
 
-  // Calculate projection (memoized)
+  // Auto-advance any dates that have passed (on load and day change)
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const today = new Date();
+    const advanced = advancePassedDates(config, today);
+    if (advanced) {
+      setConfig(advanced);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, currentDay]); // Intentionally exclude config to avoid infinite loop
+
+  // Calculate projection (memoized) - recalculates when config or date changes
   const projection = useMemo(() => {
+    // currentDay is used to trigger recalculation at midnight
+    void currentDay;
     return generateProjection(config);
-  }, [config]);
+  }, [config, currentDay]);
 
   // Calculate goal dates (memoized)
   const goalDates = useMemo(() => {
     if (projection.length === 0) return null;
+    // currentDay ensures "days to goal" updates at midnight
+    void currentDay;
     return calculateGoalDates(config, projection);
-  }, [config, projection]);
+  }, [config, projection, currentDay]);
 
   // Get selected period data
   const selectedPeriodData = selectedPeriod !== null
@@ -77,15 +102,36 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <h1 className="text-2xl font-bold text-gray-900">Budget Tracker</h1>
+      <header className="bg-gradient-to-b from-primary-900 to-primary-800 shadow-lg">
+        <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-accent-500 flex items-center justify-center shadow-sm">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white tracking-tight">Budget Tracker</h1>
+                <p className="text-xs text-primary-300">Plan your financial future</p>
+              </div>
+            </div>
+            <button
+              onClick={forceRefresh}
+              className="w-10 h-10 rounded-lg bg-primary-700/50 hover:bg-primary-600/50 flex items-center justify-center transition-colors"
+              title="Refresh projections"
+            >
+              <svg className="w-5 h-5 text-primary-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <main className="max-w-6xl mx-auto px-3 py-4 pb-20 sm:px-6 md:pb-6">
         {selectedPeriod !== null && selectedPeriodData ? (
           /* Period Detail View */
           <PeriodDetail
@@ -99,87 +145,90 @@ function App() {
         ) : (
           /* Main View */
           <>
-            {/* Budget Form */}
-            <div className="mb-8">
+            {/* Budget Form - Always visible on desktop, conditional on mobile */}
+            <div className={`mb-6 ${view !== 'form' ? 'hidden md:block' : ''}`}>
               <BudgetForm config={config} onChange={setConfig} />
             </div>
 
             {/* Goal Timeline Summary */}
             {goalDates && config.savingsGoal > 0 && (
-              <div className="bg-white p-4 rounded-lg shadow mb-8">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  Goal Timeline: {formatCurrency(config.savingsGoal)}
+              <div className={`bg-white rounded-xl border border-neutral-200/60 shadow-sm p-5 mb-6 ${view === 'form' ? 'hidden md:block' : ''}`}>
+                <h3 className="text-base font-semibold text-primary-800 mb-4">
+                  Goal Timeline: <span className="text-accent-600 tabular-nums">{formatCurrency(config.savingsGoal)}</span>
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {goalDates.dateBeforeExpenses ? (
-                    <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-blue-600 font-medium">
+                    <div className="relative overflow-hidden rounded-xl border border-primary-200 bg-gradient-to-br from-primary-50 to-primary-100/50 p-4">
+                      <div className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 bg-primary-200/30 rounded-full blur-xl"></div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-primary-600 mb-1">
                         Before Expenses
                       </p>
-                      <p className="text-lg font-bold text-blue-900">
+                      <p className="text-lg font-bold text-primary-900 tabular-nums">
                         {formatDate(goalDates.dateBeforeExpenses)}
                       </p>
-                      <p className="text-sm text-blue-600">
+                      <p className="text-xs text-primary-500 mt-1">
                         (ignoring all expenses)
                       </p>
                     </div>
                   ) : (
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600 font-medium">
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
                         Before Expenses
                       </p>
-                      <p className="text-lg font-bold text-gray-400">
+                      <p className="text-lg font-bold text-neutral-400">
                         Not achievable
                       </p>
                     </div>
                   )}
 
                   {goalDates.dateAfterExpenses ? (
-                    <div className="p-3 bg-amber-50 rounded-lg">
-                      <p className="text-sm text-amber-600 font-medium">
+                    <div className="relative overflow-hidden rounded-xl border border-warning-200 bg-gradient-to-br from-warning-50 to-warning-100/50 p-4">
+                      <div className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 bg-warning-200/30 rounded-full blur-xl"></div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-warning-600 mb-1">
                         After Expenses
                       </p>
-                      <p className="text-lg font-bold text-amber-900">
+                      <p className="text-lg font-bold text-warning-700 tabular-nums">
                         {formatDate(goalDates.dateAfterExpenses)}
                       </p>
-                      <p className="text-sm text-amber-600">
+                      <p className="text-xs text-warning-600 mt-1">
                         (after recurring expenses)
                       </p>
                     </div>
                   ) : (
-                    <div className="p-3 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-600 font-medium">
+                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
                         After Expenses
                       </p>
-                      <p className="text-lg font-bold text-gray-400">
+                      <p className="text-lg font-bold text-neutral-400">
                         Not achievable
                       </p>
                     </div>
                   )}
 
                   {goalDates.dateAfterBaseline ? (
-                    <div className="p-3 bg-purple-50 rounded-lg border-2 border-purple-200">
-                      <p className="text-sm text-purple-600 font-medium">
+                    <div className="relative overflow-hidden rounded-xl border-2 border-accent-300 bg-gradient-to-br from-accent-50 to-accent-100/50 p-4 ring-1 ring-accent-400/20">
+                      <div className="absolute top-0 right-0 w-20 h-20 -mr-6 -mt-6 bg-accent-300/30 rounded-full blur-2xl"></div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-accent-700 mb-1">
                         After All Spending
                       </p>
-                      <p className="text-lg font-bold text-purple-900">
+                      <p className="text-xl font-bold text-accent-800 tabular-nums">
                         {formatDate(goalDates.dateAfterBaseline)}
                       </p>
-                      <p className="text-sm text-purple-600">
+                      <p className="text-sm font-medium text-accent-600 mt-1">
                         {goalDates.daysToGoal > 0
                           ? `${goalDates.daysToGoal} days (${goalDates.periodsToGoal} pay periods)`
                           : 'Goal already reached!'}
                       </p>
                     </div>
                   ) : (
-                    <div className="p-3 bg-red-50 rounded-lg border-2 border-red-200">
-                      <p className="text-sm text-red-600 font-medium">
+                    <div className="relative overflow-hidden rounded-xl border-2 border-danger-200 bg-gradient-to-br from-danger-50 to-danger-100/50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-danger-600 mb-1">
                         After All Spending
                       </p>
-                      <p className="text-lg font-bold text-red-700">
+                      <p className="text-lg font-bold text-danger-700">
                         Not achievable
                       </p>
-                      <p className="text-sm text-red-600">
+                      <p className="text-xs text-danger-500 mt-1">
                         Expenses exceed income
                       </p>
                     </div>
@@ -188,26 +237,26 @@ function App() {
               </div>
             )}
 
-            {/* View Toggle */}
+            {/* View Toggle - Desktop only */}
             {projection.length > 0 && (
-              <div className="flex justify-center mb-4">
-                <div className="inline-flex rounded-md shadow-sm">
+              <div className={`hidden md:flex justify-center mb-4 ${view === 'form' ? 'md:hidden' : ''}`}>
+                <div className="inline-flex rounded-lg bg-neutral-100 p-1 gap-1">
                   <button
                     onClick={() => setView('chart')}
-                    className={`px-4 py-2 text-sm font-medium rounded-l-lg border ${
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                       view === 'chart'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        ? 'bg-white text-primary-800 shadow-sm'
+                        : 'text-neutral-600 hover:text-primary-700'
                     }`}
                   >
                     Chart
                   </button>
                   <button
                     onClick={() => setView('table')}
-                    className={`px-4 py-2 text-sm font-medium rounded-r-lg border-t border-r border-b ${
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                       view === 'table'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        ? 'bg-white text-primary-800 shadow-sm'
+                        : 'text-neutral-600 hover:text-primary-700'
                     }`}
                   >
                     Table
@@ -216,28 +265,41 @@ function App() {
               </div>
             )}
 
-            {/* Projection Display */}
-            {view === 'chart' ? (
-              <ProjectionChart data={projection} savingsGoal={config.savingsGoal} />
-            ) : (
-              <ProjectionTable
-                data={projection}
-                savingsGoal={config.savingsGoal}
-                onSelectPeriod={setSelectedPeriod}
-              />
+            {/* Projection Display - single chart instance to avoid hidden container issues */}
+            {projection.length > 0 && (
+              <>
+                {/* Chart - show when: mobile+chart view, OR desktop+not table view */}
+                {(view === 'chart' || (isDesktop && view !== 'table')) && (
+                  <ProjectionChart data={projection} savingsGoal={config.savingsGoal} />
+                )}
+
+                {/* Table view */}
+                {view === 'table' && (
+                  <ProjectionTable
+                    data={projection}
+                    savingsGoal={config.savingsGoal}
+                    onSelectPeriod={setSelectedPeriod}
+                  />
+                )}
+              </>
             )}
           </>
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-8">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-gray-500">
-            Data auto-saved to data/budget.json
+      {/* Footer - hidden on mobile due to bottom nav */}
+      <footer className="hidden md:block bg-white border-t border-neutral-200 mt-8">
+        <div className="max-w-6xl mx-auto px-4 py-4 sm:px-6">
+          <p className="text-center text-xs text-neutral-400">
+            Data auto-saved locally
           </p>
         </div>
       </footer>
+
+      {/* Bottom Navigation - Mobile only */}
+      {selectedPeriod === null && (
+        <BottomNav view={view} onViewChange={setView} />
+      )}
     </div>
   );
 }
