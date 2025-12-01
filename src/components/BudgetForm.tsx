@@ -15,11 +15,12 @@ import {
 interface BudgetFormProps {
   config: BudgetConfig;
   onChange: (config: BudgetConfig) => void;
+  onBalanceUpdate: (balance: number) => void;
   calculatedBaseline: { average: number; count: number } | null;
   recordedPeriodsCount: number;
 }
 
-export function BudgetForm({ config, onChange, calculatedBaseline, recordedPeriodsCount }: BudgetFormProps) {
+export function BudgetForm({ config, onChange, onBalanceUpdate, calculatedBaseline, recordedPeriodsCount }: BudgetFormProps) {
   const [editingExpense, setEditingExpense] = useState<string | null>(null);
   const [newExpense, setNewExpense] = useState({
     name: '',
@@ -73,12 +74,19 @@ export function BudgetForm({ config, onChange, calculatedBaseline, recordedPerio
 
   return (
     <div className="space-y-4 md:space-y-6">
-      {/* Current Balance and Savings Goal */}
+      {/* Starting Balance and Savings Goal */}
       <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
-          <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500 mb-1.5">
-            Current Balance
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-medium uppercase tracking-wider text-neutral-500">
+              Starting Balance
+            </label>
+            {config.currentBalanceAsOf && (
+              <span className="text-xs text-neutral-400">
+                as of {new Date(config.currentBalanceAsOf + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </span>
+            )}
+          </div>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
             <input
@@ -86,13 +94,16 @@ export function BudgetForm({ config, onChange, calculatedBaseline, recordedPerio
               inputMode="decimal"
               value={config.currentBalance || ''}
               onChange={(e) =>
-                updateField('currentBalance', parseFloat(e.target.value) || 0)
+                onBalanceUpdate(parseFloat(e.target.value) || 0)
               }
               className="w-full pl-8 pr-4 py-3 text-base border border-neutral-300 rounded-lg transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 md:py-2 md:text-sm"
               placeholder="0.00"
               step="0.01"
             />
           </div>
+          <p className="mt-1.5 text-xs text-neutral-500">
+            Your bank balance at the start of this pay period
+          </p>
         </div>
 
         <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">

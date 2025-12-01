@@ -34,10 +34,17 @@ export interface AdHocTransaction {
   isIncome: boolean;     // true = income, false = expense
 }
 
-export interface ActualPeriodBalance {
-  periodNumber: number;      // Which period (matches ProjectionEntry)
-  endingBalance: number;     // Actual ending balance
-  recordedAt: string;        // ISO timestamp when entered
+export interface PeriodStartSnapshot {
+  periodStartDate: string;   // ISO date of when this period started
+  balance: number;           // What currentBalance was at period start
+}
+
+export interface PeriodSpendEntry {
+  periodEndDate: string;     // When this period ended
+  startingBalance: number;   // Balance at start of period
+  expectedEnding: number;    // Calculated: start + income - expenses
+  actualEnding: number;      // What user reported as new starting balance
+  trueSpend: number;         // expectedEnding - actualEnding (discretionary spend)
 }
 
 export interface BudgetConfig {
@@ -52,10 +59,13 @@ export interface BudgetConfig {
   adHocTransactions: AdHocTransaction[];
   baselineSpendPerPeriod: number;
   savingsGoal: number;
-  // Actual balance tracking
-  actualPeriodBalances: ActualPeriodBalance[];
+  // Starting balance tracking
+  currentBalanceAsOf?: string;      // ISO date - when user last updated currentBalance
+  periodStartSnapshot?: PeriodStartSnapshot;  // Snapshot at period start for true spend calc
+  periodSpendHistory: PeriodSpendEntry[];     // History of true spend per period
   periodsForBaselineCalc: number;    // Default: 8
   useCalculatedBaseline: boolean;    // Toggle: use calculated vs manual
+  transitionHistoryRetentionDays: number;  // Default: 7
 }
 
 export interface ProjectionEntry {
@@ -98,9 +108,12 @@ export const DEFAULT_CONFIG: BudgetConfig = {
   adHocTransactions: [],
   baselineSpendPerPeriod: 0,
   savingsGoal: 0,
-  actualPeriodBalances: [],
+  currentBalanceAsOf: undefined,
+  periodStartSnapshot: undefined,
+  periodSpendHistory: [],
   periodsForBaselineCalc: 8,
   useCalculatedBaseline: false,
+  transitionHistoryRetentionDays: 7,
 };
 
 export const WEEKEND_HANDLING_LABELS: Record<WeekendHandling, string> = {

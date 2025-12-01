@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { format, isBefore, startOfDay } from 'date-fns';
-import type { ProjectionEntry, AdHocTransaction, ActualPeriodBalance } from '../types';
+import { format } from 'date-fns';
+import type { ProjectionEntry, AdHocTransaction } from '../types';
 import { formatCurrency } from '../calculations';
 
 interface PeriodDetailProps {
@@ -10,10 +10,6 @@ interface PeriodDetailProps {
   onUpdateTransaction: (txn: AdHocTransaction) => void;
   onDeleteTransaction: (id: string) => void;
   onBack: () => void;
-  // Actual balance tracking
-  actualBalance?: ActualPeriodBalance;
-  onSaveActualBalance: (periodNumber: number, endingBalance: number) => void;
-  onDeleteActualBalance: (periodNumber: number) => void;
 }
 
 interface NewTransaction {
@@ -35,24 +31,10 @@ export function PeriodDetail({
   onUpdateTransaction,
   onDeleteTransaction,
   onBack,
-  actualBalance,
-  onSaveActualBalance,
-  onDeleteActualBalance,
 }: PeriodDetailProps) {
   const [newTransaction, setNewTransaction] = useState<NewTransaction>(EMPTY_NEW_TRANSACTION);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTransaction, setEditTransaction] = useState<NewTransaction>(EMPTY_NEW_TRANSACTION);
-
-  // Actual balance editing state
-  const [actualBalanceInput, setActualBalanceInput] = useState<string>(
-    actualBalance ? actualBalance.endingBalance.toString() : ''
-  );
-  const [isEditingActual, setIsEditingActual] = useState(false);
-
-  // Check if period is in the past (can record actual balance)
-  const today = startOfDay(new Date());
-  const periodDate = startOfDay(period.date);
-  const isPastPeriod = isBefore(periodDate, today) || periodDate.getTime() === today.getTime();
 
   const handleAdd = () => {
     const amount = parseFloat(newTransaction.amount);
@@ -93,24 +75,6 @@ export function PeriodDetail({
     setEditingId(null);
     setEditTransaction(EMPTY_NEW_TRANSACTION);
   };
-
-  const handleSaveActual = () => {
-    const balance = parseFloat(actualBalanceInput);
-    if (isNaN(balance)) return;
-    onSaveActualBalance(period.periodNumber, balance);
-    setIsEditingActual(false);
-  };
-
-  const handleDeleteActual = () => {
-    onDeleteActualBalance(period.periodNumber);
-    setActualBalanceInput('');
-    setIsEditingActual(false);
-  };
-
-  // Calculate variance if actual balance exists
-  const variance = actualBalance
-    ? period.balanceAfterBaseline - actualBalance.endingBalance
-    : null;
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -200,115 +164,6 @@ export function PeriodDetail({
           </div>
         </div>
       </div>
-
-      {/* Actual Balance Section - only show for past/current periods */}
-      {isPastPeriod && (
-        <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
-          <h3 className="text-base font-semibold text-primary-800 mb-3">Actual Balance</h3>
-
-          {actualBalance && !isEditingActual ? (
-            // Display recorded balance with variance
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-neutral-500">Recorded ending balance</p>
-                  <p className="text-xl font-bold text-primary-900 tabular-nums">
-                    {formatCurrency(actualBalance.endingBalance)}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setActualBalanceInput(actualBalance.endingBalance.toString());
-                      setIsEditingActual(true);
-                    }}
-                    className="px-3 py-2 text-sm font-medium text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded-lg transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={handleDeleteActual}
-                    className="px-3 py-2 text-sm font-medium text-danger-600 hover:text-danger-800 hover:bg-danger-50 rounded-lg transition-colors"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-
-              {/* Variance display */}
-              {variance !== null && (
-                <div className="pt-3 border-t border-neutral-200">
-                  <p className="text-xs font-medium uppercase tracking-wider text-neutral-500 mb-2">Projection Accuracy</p>
-                  <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div>
-                      <p className="text-neutral-500">Projected</p>
-                      <p className="font-medium tabular-nums">{formatCurrency(period.balanceAfterBaseline)}</p>
-                    </div>
-                    <div>
-                      <p className="text-neutral-500">Actual</p>
-                      <p className="font-medium tabular-nums">{formatCurrency(actualBalance.endingBalance)}</p>
-                    </div>
-                    <div>
-                      <p className="text-neutral-500">Variance</p>
-                      <p className={`font-medium tabular-nums ${
-                        variance > 0 ? 'text-danger-600' : variance < 0 ? 'text-accent-600' : 'text-neutral-600'
-                      }`}>
-                        {variance > 0 ? '-' : variance < 0 ? '+' : ''}{formatCurrency(Math.abs(variance))}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-2">
-                    {variance > 0
-                      ? `Spent ${formatCurrency(variance)} more than projected`
-                      : variance < 0
-                      ? `Saved ${formatCurrency(Math.abs(variance))} more than projected`
-                      : 'Projection was exactly accurate'}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            // Entry form
-            <div>
-              <p className="text-sm text-neutral-500 mb-3">
-                Record your actual ending balance for this period to improve baseline calculations.
-              </p>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={actualBalanceInput}
-                    onChange={(e) => setActualBalanceInput(e.target.value)}
-                    placeholder="0.00"
-                    step="0.01"
-                    className="w-full pl-7 pr-3 py-2.5 border border-neutral-300 rounded-lg text-sm transition-all duration-150 hover:border-neutral-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                  />
-                </div>
-                <button
-                  onClick={handleSaveActual}
-                  disabled={!actualBalanceInput || isNaN(parseFloat(actualBalanceInput))}
-                  className="px-4 py-2.5 bg-primary-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all duration-150 hover:bg-primary-800 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Save
-                </button>
-                {isEditingActual && (
-                  <button
-                    onClick={() => {
-                      setIsEditingActual(false);
-                      setActualBalanceInput(actualBalance?.endingBalance.toString() ?? '');
-                    }}
-                    className="px-4 py-2.5 text-sm font-medium text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Recurring Expenses */}
       {period.expenseDetails.length > 0 && (

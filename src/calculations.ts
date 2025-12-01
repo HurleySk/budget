@@ -10,7 +10,7 @@ import type {
   SemiMonthlyConfig,
   MonthlyConfig,
   ExpenseOccurrence,
-  ActualPeriodBalance,
+  PeriodSpendEntry,
 } from './types';
 
 // Convert frequency to monthly multiplier
@@ -362,18 +362,6 @@ export function getNetPerPeriod(config: BudgetConfig): number {
 }
 
 /**
- * Get average days per pay period for proration calculations
- */
-function getAverageDaysPerPeriod(frequency: PayFrequency): number {
-  switch (frequency) {
-    case 'weekly': return 7;
-    case 'biweekly': return 14;
-    case 'semimonthly': return 15.22;  // 365.25/24
-    case 'monthly': return 30.44;       // 365.25/12
-  }
-}
-
-/**
  * Generate projection entries until goal is reached + 3 months
  * Max projection: 5 years to prevent infinite loops
  *
@@ -419,11 +407,6 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
 
   // Only add partial period if there are days before next paycheck
   if (daysUntilNextPay > 0) {
-    // Prorated baseline for remaining days (capped at 1.0 to never exceed full period)
-    const avgDaysPerPeriod = getAverageDaysPerPeriod(config.paycheckFrequency);
-    const baselineProration = Math.min(daysUntilNextPay / avgDaysPerPeriod, 1.0);
-    const proratedBaseline = Math.round(effectiveBaseline * baselineProration * 100) / 100;
-
     // Get expenses between today and next paycheck (exclusive of pay date)
     const partialPeriodExpenses = getExpensesBetweenDates(
       allExpenseOccurrences,
@@ -441,7 +424,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     // Calculate balances for partial period (no paycheck income)
     balanceAfterIncome = config.currentBalance + period0AdHocIncome;
     balanceAfterExpenses = balanceAfterIncome - partialExpenseTotal - period0AdHocExpense;
-    balanceAfterBaseline = balanceAfterExpenses - proratedBaseline;
+    balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
     entries.push({
       date: today,
@@ -452,7 +435,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       adHocIncome: period0AdHocIncome,
       adHocExpenses: period0AdHocExpense,
       adHocDetails: period0AdHocs,
-      baselineSpend: proratedBaseline,
+      baselineSpend: effectiveBaseline,
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
@@ -607,45 +590,204 @@ export function formatDate(date: Date): string {
 }
 
 /**
- * Calculate average baseline spend from actual period balances.
- * The actual baseline for a period = balanceAfterExpenses - actualEndingBalance
- * (i.e., what was actually spent beyond tracked expenses)
+ * Calculate average baseline spend from period spend history.
+ * Uses the trueSpend values recorded when periods transition.
  */
 export function calculateAverageBaseline(
-  actualBalances: ActualPeriodBalance[],
-  projection: ProjectionEntry[]
+  periodSpendHistory: PeriodSpendEntry[],
+  periodsToUse: number
 ): { average: number; count: number } | null {
-  if (!actualBalances || actualBalances.length === 0) return null;
+  if (!periodSpendHistory || periodSpendHistory.length === 0) return null;
 
-  const baselineSpends: number[] = [];
+  // Use the most recent N periods
+  const recentPeriods = periodSpendHistory.slice(-periodsToUse);
 
-  for (const actual of actualBalances) {
-    // Skip period 0 (partial period) from calculation
-    if (actual.periodNumber === 0) continue;
+  // Only count non-negative true spend values
+  const validSpends = recentPeriods
+    .map(p => Math.max(0, p.trueSpend))  // Floor at 0 (user saved more than expected)
+    .filter(s => !isNaN(s));
 
-    const period = projection.find(p => p.periodNumber === actual.periodNumber);
-    if (!period) continue;
+  if (validSpends.length === 0) return null;
 
-    // Actual baseline = what was spent = balanceAfterExpenses - actualEnding
-    // This represents discretionary spending beyond tracked expenses
-    const actualBaseline = period.balanceAfterExpenses - actual.endingBalance;
-
-    // Only count non-negative values (user might have saved more than expected)
-    if (actualBaseline >= 0) {
-      baselineSpends.push(actualBaseline);
-    } else {
-      // User saved money - count as 0 baseline for this period
-      baselineSpends.push(0);
-    }
-  }
-
-  if (baselineSpends.length === 0) return null;
-
-  const average = baselineSpends.reduce((sum, s) => sum + s, 0) / baselineSpends.length;
+  const average = validSpends.reduce((sum, s) => sum + s, 0) / validSpends.length;
   return {
     average: Math.round(average * 100) / 100,
-    count: baselineSpends.length
+    count: validSpends.length
   };
+}
+
+/**
+ * Detect if a period transition has occurred (nextPayDate is in the past).
+ */
+export function detectPeriodTransition(
+  config: BudgetConfig,
+  today: Date
+): { transitioned: boolean; passedPayDate: Date | null } {
+  const todayStart = startOfDay(today);
+  const nextPay = parseISO(config.nextPayDate);
+
+  if (isBefore(nextPay, todayStart)) {
+    return { transitioned: true, passedPayDate: nextPay };
+  }
+
+  return { transitioned: false, passedPayDate: null };
+}
+
+/**
+ * Calculate true spend for a completed period.
+ * trueSpend = expectedEnding - actualEnding (newStartingBalance)
+ */
+export function calculateTrueSpend(
+  startingBalance: number,
+  income: number,
+  expenses: number,
+  adHocIncome: number,
+  adHocExpenses: number,
+  newStartingBalance: number
+): { trueSpend: number; expectedEnding: number } {
+  const expectedEnding = startingBalance + income - expenses + adHocIncome - adHocExpenses;
+  const trueSpend = expectedEnding - newStartingBalance;
+
+  return {
+    trueSpend: Math.round(trueSpend * 100) / 100,
+    expectedEnding: Math.round(expectedEnding * 100) / 100
+  };
+}
+
+/**
+ * Handle period transition: update currentBalance and record true spend.
+ * Should be called BEFORE advancePassedDates().
+ *
+ * @returns Updated config and transition info, or null if no transition needed
+ */
+export function handlePeriodTransition(
+  config: BudgetConfig,
+  today: Date,
+  projection: ProjectionEntry[]
+): {
+  transitioned: boolean;
+  config: BudgetConfig;
+  newBalance: number;
+  trueSpend: number;
+} | null {
+  const { transitioned, passedPayDate } = detectPeriodTransition(config, today);
+
+  if (!transitioned || !passedPayDate) {
+    return null;
+  }
+
+  const todayStr = today.toISOString().split('T')[0];
+
+  // Check if user has already updated balance since the transition
+  // (currentBalanceAsOf is on or after the passed pay date)
+  const balanceAsOf = config.currentBalanceAsOf ? parseISO(config.currentBalanceAsOf) : null;
+  const userAlreadyUpdated = balanceAsOf && !isBefore(balanceAsOf, passedPayDate);
+
+  if (userAlreadyUpdated) {
+    // User already entered a new starting balance - just ensure snapshot is set
+    const newConfig: BudgetConfig = {
+      ...config,
+      periodStartSnapshot: {
+        periodStartDate: config.currentBalanceAsOf!,
+        balance: config.currentBalance,
+      },
+    };
+    return {
+      transitioned: true,
+      config: newConfig,
+      newBalance: config.currentBalance,
+      trueSpend: 0,
+    };
+  }
+
+  // User hasn't updated - auto-set to projected ending balance
+  // Find period 0 (partial period) or period 1's ending
+  const currentPeriod = projection.find(p => p.periodNumber === 0) ?? projection[0];
+  if (!currentPeriod) {
+    return null;
+  }
+
+  const newBalance = currentPeriod.balanceAfterBaseline;
+  let trueSpend = 0;
+  let periodSpendHistory = [...(config.periodSpendHistory ?? [])];
+
+  // Record the period that just ended (if we have a snapshot)
+  if (config.periodStartSnapshot) {
+    // Get period data from projection for the period that ended
+    // This is tricky - we need to calculate what the expected ending was
+    const startingBalance = config.periodStartSnapshot.balance;
+
+    // For period 0 (partial), use its data; otherwise sum up
+    const income = currentPeriod.income;
+    const expenses = currentPeriod.expenses;
+    const adHocIncome = currentPeriod.adHocIncome;
+    const adHocExpenses = currentPeriod.adHocExpenses;
+
+    const result = calculateTrueSpend(
+      startingBalance,
+      income,
+      expenses,
+      adHocIncome,
+      adHocExpenses,
+      newBalance
+    );
+
+    trueSpend = result.trueSpend;
+
+    // Since we're auto-projecting, trueSpend should be ~0 (or equal to baseline)
+    // Actually, the expected ending already includes baseline deduction,
+    // so if we use balanceAfterBaseline as newBalance, trueSpend ≈ baseline
+    // This is a bit circular - let's record it anyway for consistency
+
+    periodSpendHistory.push({
+      periodEndDate: passedPayDate.toISOString().split('T')[0],
+      startingBalance,
+      expectedEnding: result.expectedEnding,
+      actualEnding: newBalance,
+      trueSpend: 0,  // Auto-projected, so we assume baseline was accurate
+    });
+  }
+
+  // Prune old history entries beyond retention period
+  const retentionDays = config.transitionHistoryRetentionDays ?? 7;
+  const cutoffDate = addDays(today, -retentionDays);
+  periodSpendHistory = periodSpendHistory.filter(entry => {
+    const entryDate = parseISO(entry.periodEndDate);
+    return !isBefore(entryDate, cutoffDate);
+  });
+
+  const newConfig: BudgetConfig = {
+    ...config,
+    currentBalance: newBalance,
+    currentBalanceAsOf: todayStr,
+    periodStartSnapshot: {
+      periodStartDate: todayStr,
+      balance: newBalance,
+    },
+    periodSpendHistory,
+  };
+
+  return {
+    transitioned: true,
+    config: newConfig,
+    newBalance,
+    trueSpend,
+  };
+}
+
+/**
+ * Check if we're in a new period compared to the last snapshot.
+ * Used when user updates balance to determine if we should record true spend.
+ */
+export function isNewPeriod(
+  config: BudgetConfig,
+  currentPayDate: string
+): boolean {
+  if (!config.periodStartSnapshot) {
+    return true;  // No snapshot means we're starting fresh
+  }
+
+  return config.periodStartSnapshot.periodStartDate !== currentPayDate;
 }
 
 /**

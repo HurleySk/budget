@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { BudgetConfig, AdHocTransaction } from './types';
 import { DEFAULT_CONFIG } from './types';
-import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates, calculateAverageBaseline } from './calculations';
+import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates, calculateAverageBaseline, handlePeriodTransition, calculateTrueSpend } from './calculations';
 import { saveBudget, loadBudget } from './storage';
 import { BudgetForm } from './components/BudgetForm';
 import { ProjectionChart } from './components/ProjectionChart';
@@ -20,6 +20,7 @@ function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('Projections refreshed');
 
   // Track current day - updates automatically at midnight
   const { currentDay, forceRefresh } = useCurrentDay();
@@ -27,6 +28,7 @@ function App() {
   // Wrapped refresh handler that shows toast
   const handleRefresh = useCallback(() => {
     forceRefresh();
+    setToastMessage('Projections refreshed');
     setShowToast(true);
   }, [forceRefresh]);
 
@@ -51,13 +53,30 @@ function App() {
   }, [config, isLoaded]);
 
   // Auto-advance any dates that have passed (on load and day change)
+  // Also handle period transitions (update currentBalance)
   useEffect(() => {
     if (!isLoaded) return;
 
     const today = new Date();
-    const advanced = advancePassedDates(config, today);
-    if (advanced) {
-      setConfig(advanced);
+
+    // First, generate current projection to use for transition calculation
+    const currentProjection = generateProjection(config);
+
+    // Handle period transition FIRST (updates currentBalance)
+    const transitionResult = handlePeriodTransition(config, today, currentProjection);
+    if (transitionResult) {
+      setToastMessage(`Balance updated to ${formatCurrency(transitionResult.newBalance)}`);
+      setShowToast(true);
+
+      // Then advance dates on the transitioned config
+      const advanced = advancePassedDates(transitionResult.config, today);
+      setConfig(advanced ?? transitionResult.config);
+    } else {
+      // No transition, just advance dates
+      const advanced = advancePassedDates(config, today);
+      if (advanced) {
+        setConfig(advanced);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, currentDay]); // Intentionally exclude config to avoid infinite loop
@@ -68,21 +87,18 @@ function App() {
     void currentDay;
     // Use calculated baseline if enabled and we have enough data
     const useCalc = config.useCalculatedBaseline;
-    const actualBalances = config.actualPeriodBalances ?? [];
+    const periodSpendHistory = config.periodSpendHistory ?? [];
     const periodsRequired = config.periodsForBaselineCalc ?? 8;
 
-    // First generate projection with manual baseline to calculate averages
-    const baseProjection = generateProjection(config);
-
-    // If using calculated baseline and we have enough periods, recalculate with it
-    if (useCalc && actualBalances.length >= periodsRequired) {
-      const calcResult = calculateAverageBaseline(actualBalances, baseProjection);
+    // If using calculated baseline and we have enough periods, calculate with it
+    if (useCalc && periodSpendHistory.length >= periodsRequired) {
+      const calcResult = calculateAverageBaseline(periodSpendHistory, periodsRequired);
       if (calcResult) {
         return generateProjection(config, calcResult.average);
       }
     }
 
-    return baseProjection;
+    return generateProjection(config);
   }, [config, currentDay]);
 
   // Calculate goal dates (memoized)
@@ -125,32 +141,70 @@ function App() {
     }));
   };
 
-  // Actual balance handlers
-  const handleSaveActualBalance = (periodNumber: number, endingBalance: number) => {
-    setConfig(prev => ({
-      ...prev,
-      actualPeriodBalances: [
-        ...(prev.actualPeriodBalances ?? []).filter(a => a.periodNumber !== periodNumber),
-        { periodNumber, endingBalance, recordedAt: new Date().toISOString() }
-      ]
-    }));
-  };
+  // Handle starting balance update from user
+  const handleBalanceUpdate = useCallback((newBalance: number) => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
 
-  const handleDeleteActualBalance = (periodNumber: number) => {
-    setConfig(prev => ({
-      ...prev,
-      actualPeriodBalances: (prev.actualPeriodBalances ?? []).filter(
-        a => a.periodNumber !== periodNumber
-      )
-    }));
-  };
+    setConfig(prev => {
+      // Check if this is a new period (user entering balance after transition)
+      const isFirstUpdate = !prev.periodStartSnapshot;
+      const snapshot = prev.periodStartSnapshot;
 
-  // Calculate average baseline from actual data
+      // If we have a snapshot from a previous period, calculate true spend
+      if (snapshot && snapshot.periodStartDate !== todayStr) {
+        // Find the current period in projection to get income/expense data
+        const currentPeriod = projection.find(p => p.periodNumber === 0) ?? projection[0];
+
+        if (currentPeriod) {
+          const result = calculateTrueSpend(
+            snapshot.balance,
+            currentPeriod.income,
+            currentPeriod.expenses,
+            currentPeriod.adHocIncome,
+            currentPeriod.adHocExpenses,
+            newBalance
+          );
+
+          // Record in history
+          const historyEntry = {
+            periodEndDate: snapshot.periodStartDate,
+            startingBalance: snapshot.balance,
+            expectedEnding: result.expectedEnding,
+            actualEnding: newBalance,
+            trueSpend: result.trueSpend,
+          };
+
+          return {
+            ...prev,
+            currentBalance: newBalance,
+            currentBalanceAsOf: todayStr,
+            periodSpendHistory: [...(prev.periodSpendHistory ?? []), historyEntry],
+            periodStartSnapshot: { periodStartDate: todayStr, balance: newBalance },
+          };
+        }
+      }
+
+      // Same period or first update - just update balance
+      return {
+        ...prev,
+        currentBalance: newBalance,
+        currentBalanceAsOf: todayStr,
+        periodStartSnapshot: isFirstUpdate
+          ? { periodStartDate: todayStr, balance: newBalance }
+          : prev.periodStartSnapshot,
+      };
+    });
+  }, [projection]);
+
+  // Calculate average baseline from period spend history
   const calculatedBaseline = useMemo(() => {
-    return calculateAverageBaseline(config.actualPeriodBalances ?? [], projection);
-  }, [config.actualPeriodBalances, projection]);
+    const periodSpendHistory = config.periodSpendHistory ?? [];
+    const periodsRequired = config.periodsForBaselineCalc ?? 8;
+    return calculateAverageBaseline(periodSpendHistory, periodsRequired);
+  }, [config.periodSpendHistory, config.periodsForBaselineCalc]);
 
-  const recordedPeriodsCount = (config.actualPeriodBalances ?? []).length;
+  const recordedPeriodsCount = (config.periodSpendHistory ?? []).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -192,9 +246,6 @@ function App() {
             onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onBack={() => setSelectedPeriod(null)}
-            actualBalance={(config.actualPeriodBalances ?? []).find(a => a.periodNumber === selectedPeriod)}
-            onSaveActualBalance={handleSaveActualBalance}
-            onDeleteActualBalance={handleDeleteActualBalance}
           />
         ) : (
           /* Main View */
@@ -204,6 +255,7 @@ function App() {
               <BudgetForm
                 config={config}
                 onChange={setConfig}
+                onBalanceUpdate={handleBalanceUpdate}
                 calculatedBaseline={calculatedBaseline}
                 recordedPeriodsCount={recordedPeriodsCount}
               />
@@ -362,7 +414,7 @@ function App() {
 
       {/* Toast notification */}
       <Toast
-        message="Projections refreshed"
+        message={toastMessage}
         isVisible={showToast}
         onClose={() => setShowToast(false)}
       />
