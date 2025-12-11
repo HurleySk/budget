@@ -47,6 +47,37 @@ export interface PeriodSpendEntry {
   trueSpend: number;         // expectedEnding - actualEnding (discretionary spend)
 }
 
+export type VarianceReason =
+  | 'adhoc_expense'           // One-time unexpected expense
+  | 'planned_cost_higher'     // Pre-planned expense cost more than expected
+  | 'baseline_miss';          // True baseline spending miss
+
+export interface VarianceExplanation {
+  reason: VarianceReason;
+  amount: number;
+  description?: string;        // Optional note (e.g., "car repair")
+  affectsBaseline: boolean;    // Only 'baseline_miss' = true
+}
+
+export interface HistoricalPeriod {
+  id: string;
+  periodNumber: number;        // Original period number (0 = first tracked)
+  startDate: string;           // ISO date
+  endDate: string;             // ISO date
+  startingBalance: number;
+  endingBalance: number;       // Actual ending balance
+  projectedEndingBalance: number;
+  income: number;
+  recurringExpenses: number;
+  adHocIncome: number;
+  adHocExpenses: number;
+  baselineSpend: number;
+  variance: number;            // projectedEnding - actualEnding
+  varianceExplanations: VarianceExplanation[];
+  status: 'completed' | 'pending-confirmation' | 'active';
+  confirmedAt?: string;        // ISO datetime when user confirmed
+}
+
 export interface BudgetConfig {
   currentBalance: number;
   paycheckAmount: number;
@@ -66,6 +97,15 @@ export interface BudgetConfig {
   periodsForBaselineCalc: number;    // Default: 8
   useCalculatedBaseline: boolean;    // Toggle: use calculated vs manual
   transitionHistoryRetentionDays: number;  // Default: 7
+
+  // Immutable budget tracking start
+  budgetStartDate?: string;           // ISO date - when tracking began (immutable once set)
+
+  // Historical period records
+  periods: HistoricalPeriod[];        // All historical periods
+
+  // Period confirmation settings
+  periodConfirmationGraceDays: number; // Default: 3
 }
 
 export interface ProjectionEntry {
@@ -114,6 +154,9 @@ export const DEFAULT_CONFIG: BudgetConfig = {
   periodsForBaselineCalc: 8,
   useCalculatedBaseline: false,
   transitionHistoryRetentionDays: 7,
+  budgetStartDate: undefined,
+  periods: [],
+  periodConfirmationGraceDays: 3,
 };
 
 export const WEEKEND_HANDLING_LABELS: Record<WeekendHandling, string> = {
