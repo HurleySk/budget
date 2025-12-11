@@ -18,15 +18,16 @@ export function PeriodHistorySummary({
     return null;
   }
 
-  // Calculate average baseline from periods where variance affected baseline
-  const baselineEntries = completedPeriods.flatMap((p) =>
-    p.varianceExplanations
-      .filter((v) => v.affectsBaseline)
-      .map((v) => v.amount)
-  );
+  // Calculate average baseline from completed periods
+  const baselineSpends = completedPeriods.map(period => {
+    const baselineVariance = period.varianceExplanations
+      .filter(v => v.affectsBaseline)
+      .reduce((sum, v) => sum + v.amount, 0);
+    return period.baselineSpend + baselineVariance;
+  });
 
-  const avgBaseline = baselineEntries.length > 0
-    ? baselineEntries.reduce((a, b) => a + b, 0) / baselineEntries.length
+  const avgBaseline = baselineSpends.length > 0
+    ? baselineSpends.reduce((sum, s) => sum + s, 0) / baselineSpends.length
     : null;
 
   const startDateFormatted = budgetStartDate
