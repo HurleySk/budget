@@ -17,11 +17,12 @@ interface BudgetFormProps {
   config: BudgetConfig;
   onChange: (config: BudgetConfig) => void;
   onBalanceUpdate: (balance: number) => void;
+  onStartNewCycle: (startDate: string, startingBalance: number) => void;
   calculatedBaseline: { average: number; count: number } | null;
   recordedPeriodsCount: number;
 }
 
-export function BudgetForm({ config, onChange, onBalanceUpdate, calculatedBaseline, recordedPeriodsCount }: BudgetFormProps) {
+export function BudgetForm({ config, onChange, onBalanceUpdate, onStartNewCycle, calculatedBaseline, recordedPeriodsCount }: BudgetFormProps) {
   const [editingExpense, setEditingExpense] = useState<string | null>(null);
   const [newExpense, setNewExpense] = useState({
     name: '',
@@ -29,6 +30,10 @@ export function BudgetForm({ config, onChange, onBalanceUpdate, calculatedBaseli
     frequency: 'monthly' as ExpenseFrequency,
     nextDueDate: new Date().toISOString().split('T')[0],
   });
+
+  const [showNewCycleForm, setShowNewCycleForm] = useState(false);
+  const [newCycleDate, setNewCycleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newCycleBalance, setNewCycleBalance] = useState('');
 
   const updateField = <K extends keyof BudgetConfig>(
     field: K,
@@ -388,6 +393,89 @@ export function BudgetForm({ config, onChange, onBalanceUpdate, calculatedBaseli
           }
           return null;
         })()}
+      </div>
+
+      {/* Start New Budget Cycle */}
+      <div className="bg-white rounded-xl border border-neutral-200/60 shadow-sm p-4 md:p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-base font-semibold text-primary-800">Budget Cycle</h3>
+            {config.budgetStartDate && (
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Started {new Date(config.budgetStartDate + 'T00:00:00').toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {!showNewCycleForm ? (
+          <button
+            onClick={() => setShowNewCycleForm(true)}
+            className="text-sm font-medium text-primary-600 hover:text-primary-800 transition-colors"
+          >
+            Start New Budget Cycle
+          </button>
+        ) : (
+          <div className="p-4 bg-warning-50 rounded-lg border border-warning-200">
+            <p className="text-sm text-warning-800 mb-4">
+              Starting a new cycle will archive your current history and begin fresh tracking.
+            </p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 mb-1">
+                  Start Date
+                </label>
+                <input
+                  type="date"
+                  value={newCycleDate}
+                  onChange={(e) => setNewCycleDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 mb-1">
+                  Starting Balance
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">$</span>
+                  <input
+                    type="number"
+                    value={newCycleBalance}
+                    onChange={(e) => setNewCycleBalance(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 border border-neutral-300 rounded-lg text-sm"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (newCycleBalance) {
+                    onStartNewCycle(newCycleDate, parseFloat(newCycleBalance));
+                    setShowNewCycleForm(false);
+                    setNewCycleBalance('');
+                  }
+                }}
+                disabled={!newCycleBalance}
+                className="px-4 py-2 text-sm font-medium text-white bg-warning-600 hover:bg-warning-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Start New Cycle
+              </button>
+              <button
+                onClick={() => setShowNewCycleForm(false)}
+                className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Recurring Expenses */}

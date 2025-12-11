@@ -291,6 +291,23 @@ function App() {
     // Don't clear pendingConfirmation - will show again on next load/day change
   }, []);
 
+  const handleStartNewCycle = useCallback((startDate: string, startingBalance: number) => {
+    setConfig(prev => ({
+      ...prev,
+      budgetStartDate: startDate,
+      currentBalance: startingBalance,
+      currentBalanceAsOf: startDate,
+      periodStartSnapshot: {
+        periodStartDate: startDate,
+        balance: startingBalance,
+      },
+      // Keep existing periods as archive, or clear if desired
+      // For now, we keep them but could add an "archived" flag
+      periods: prev.periods ?? [],
+      periodSpendHistory: [], // Clear old format
+    }));
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -347,6 +364,7 @@ function App() {
                 config={config}
                 onChange={setConfig}
                 onBalanceUpdate={handleBalanceUpdate}
+                onStartNewCycle={handleStartNewCycle}
                 calculatedBaseline={calculatedBaseline}
                 recordedPeriodsCount={recordedPeriodsCount}
               />
