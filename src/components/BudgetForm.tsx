@@ -11,6 +11,7 @@ import {
   EXPENSE_FREQUENCY_LABELS,
   WEEKEND_HANDLING_LABELS,
 } from '../types';
+import { generateUUID } from '../utils/uuid';
 
 interface BudgetFormProps {
   config: BudgetConfig;
@@ -40,7 +41,7 @@ export function BudgetForm({ config, onChange, onBalanceUpdate, calculatedBaseli
     if (!newExpense.name || !newExpense.amount || !newExpense.nextDueDate) return;
 
     const expense: RecurringExpense = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: newExpense.name,
       amount: parseFloat(newExpense.amount),
       frequency: newExpense.frequency,
