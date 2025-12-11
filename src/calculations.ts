@@ -628,6 +628,40 @@ export function calculateAverageBaseline(
 }
 
 /**
+ * Calculate average baseline from HistoricalPeriod variance explanations.
+ * Only includes variance marked as affectsBaseline = true.
+ */
+export function calculateBaselineFromPeriods(
+  periods: HistoricalPeriod[],
+  periodsToUse: number
+): { average: number; count: number } | null {
+  const completedPeriods = periods
+    .filter(p => p.status === 'completed')
+    .slice(-periodsToUse);
+
+  if (completedPeriods.length === 0) return null;
+
+  const baselineSpends = completedPeriods.map(period => {
+    // Sum variance explanations that affect baseline
+    const baselineVariance = period.varianceExplanations
+      .filter(v => v.affectsBaseline)
+      .reduce((sum, v) => sum + v.amount, 0);
+
+    // Add the recorded baseline spend for the period
+    return period.baselineSpend + baselineVariance;
+  });
+
+  const validSpends = baselineSpends.filter(s => s >= 0 && !isNaN(s));
+  if (validSpends.length === 0) return null;
+
+  const average = validSpends.reduce((sum, s) => sum + s, 0) / validSpends.length;
+  return {
+    average: Math.round(average * 100) / 100,
+    count: validSpends.length,
+  };
+}
+
+/**
  * Detect if a period transition has occurred (nextPayDate is in the past).
  */
 export function detectPeriodTransition(
