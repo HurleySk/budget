@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { BudgetConfig, AdHocTransaction } from './types';
 import { DEFAULT_CONFIG } from './types';
-import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates, calculateAverageBaseline, handlePeriodTransition, calculateTrueSpend } from './calculations';
+import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates, calculateAverageBaseline, handlePeriodTransition, calculateTrueSpend, getPendingConfirmationPeriod } from './calculations';
 import { saveBudget, loadBudget } from './storage';
 import { BudgetForm } from './components/BudgetForm';
 import { ProjectionChart } from './components/ProjectionChart';
@@ -9,8 +9,15 @@ import { ProjectionTable } from './components/ProjectionTable';
 import { PeriodDetail } from './components/PeriodDetail';
 import { BottomNav } from './components/BottomNav';
 import { Toast } from './components/Toast';
+// @ts-expect-error - Will be used in Task 10
+import { PeriodConfirmationModal } from './components/PeriodConfirmationModal';
+// @ts-expect-error - Will be used in Task 10
+import { PeriodHistorySummary } from './components/PeriodHistorySummary';
+// @ts-expect-error - Will be used in Task 10
+import { PeriodHistoryView } from './components/PeriodHistoryView';
 import { useCurrentDay } from './hooks/useCurrentDay';
 import { useIsDesktop } from './hooks/useMediaQuery';
+import { generateUUID } from './utils/uuid';
 
 type ViewMode = 'form' | 'chart' | 'table';
 
@@ -21,6 +28,15 @@ function App() {
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('Projections refreshed');
+  // @ts-expect-error - Will be used in Task 10
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  // @ts-expect-error - Will be used in Task 10
+  const [showHistoryView, setShowHistoryView] = useState(false);
+  // @ts-expect-error - Will be used in Task 10
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    periodEndDate: string;
+    projectedBalance: number;
+  } | null>(null);
 
   // Track current day - updates automatically at midnight
   const { currentDay, forceRefresh } = useCurrentDay();
@@ -81,6 +97,20 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, currentDay]); // Intentionally exclude config to avoid infinite loop
 
+  // Check for pending period confirmations
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const pending = getPendingConfirmationPeriod(config, new Date());
+    if (pending?.needsConfirmation) {
+      setPendingConfirmation({
+        periodEndDate: pending.periodEndDate,
+        projectedBalance: pending.projectedBalance,
+      });
+      setShowConfirmationModal(true);
+    }
+  }, [isLoaded, config, currentDay]);
+
   // Calculate projection (memoized) - recalculates when config or date changes
   const projection = useMemo(() => {
     // currentDay is used to trigger recalculation at midnight
@@ -120,7 +150,7 @@ function App() {
       ...prev,
       adHocTransactions: [
         ...(prev.adHocTransactions ?? []),
-        { ...txn, id: crypto.randomUUID() }
+        { ...txn, id: generateUUID() }
       ]
     }));
   };
@@ -205,6 +235,70 @@ function App() {
   }, [config.periodSpendHistory, config.periodsForBaselineCalc]);
 
   const recordedPeriodsCount = (config.periodSpendHistory ?? []).length;
+
+  // Period confirmation handlers
+  // @ts-expect-error - Will be used in Task 10
+  const handlePeriodConfirm = useCallback((
+    actualBalance: number,
+    explanations: import('./types').VarianceExplanation[]
+  ) => {
+    setConfig(prev => {
+      const periods = [...(prev.periods ?? [])];
+      const pendingIndex = periods.findIndex(p => p.status === 'pending-confirmation');
+
+      if (pendingIndex !== -1) {
+        const period = periods[pendingIndex];
+        const variance = period.projectedEndingBalance - actualBalance;
+
+        periods[pendingIndex] = {
+          ...period,
+          endingBalance: actualBalance,
+          variance,
+          varianceExplanations: explanations,
+          status: 'completed',
+          confirmedAt: new Date().toISOString(),
+        };
+      }
+
+      return {
+        ...prev,
+        periods,
+        currentBalance: actualBalance,
+        currentBalanceAsOf: new Date().toISOString().split('T')[0],
+      };
+    });
+
+    setShowConfirmationModal(false);
+    setPendingConfirmation(null);
+  }, []);
+
+  // @ts-expect-error - Will be used in Task 10
+  const handlePeriodDismiss = useCallback(() => {
+    // Mark period as completed with projected balance (skip confirmation)
+    setConfig(prev => {
+      const periods = [...(prev.periods ?? [])];
+      const pendingIndex = periods.findIndex(p => p.status === 'pending-confirmation');
+
+      if (pendingIndex !== -1) {
+        periods[pendingIndex] = {
+          ...periods[pendingIndex],
+          status: 'completed',
+          confirmedAt: new Date().toISOString(),
+        };
+      }
+
+      return { ...prev, periods };
+    });
+
+    setShowConfirmationModal(false);
+    setPendingConfirmation(null);
+  }, []);
+
+  // @ts-expect-error - Will be used in Task 10
+  const handleRemindLater = useCallback(() => {
+    setShowConfirmationModal(false);
+    // Don't clear pendingConfirmation - will show again on next load/day change
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
