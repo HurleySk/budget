@@ -720,7 +720,7 @@ export function handlePeriodTransition(
 
   const newBalance = currentPeriod.balanceAfterBaseline;
   let trueSpend = 0;
-  let periodSpendHistory = [...(config.periodSpendHistory ?? [])];
+  const periods = [...(config.periods ?? [])];
 
   // Record the period that just ended (if we have a snapshot)
   if (config.periodStartSnapshot) {
@@ -745,27 +745,22 @@ export function handlePeriodTransition(
 
     trueSpend = result.trueSpend;
 
-    // Since we're auto-projecting, trueSpend should be ~0 (or equal to baseline)
-    // Actually, the expected ending already includes baseline deduction,
-    // so if we use balanceAfterBaseline as newBalance, trueSpend ≈ baseline
-    // This is a bit circular - let's record it anyway for consistency
-
-    periodSpendHistory.push({
-      periodEndDate: passedPayDate.toISOString().split('T')[0],
+    // Create historical period entry
+    const historicalPeriod = createHistoricalPeriod(
+      periods.length,  // Next period number
+      config.periodStartSnapshot ? parseISO(config.periodStartSnapshot.periodStartDate) : passedPayDate,
+      passedPayDate,
       startingBalance,
-      expectedEnding: result.expectedEnding,
-      actualEnding: newBalance,
-      trueSpend: 0,  // Auto-projected, so we assume baseline was accurate
-    });
-  }
+      newBalance,
+      income,
+      expenses,
+      adHocIncome,
+      adHocExpenses,
+      currentPeriod.baselineSpend
+    );
 
-  // Prune old history entries beyond retention period
-  const retentionDays = config.transitionHistoryRetentionDays ?? 7;
-  const cutoffDate = addDays(today, -retentionDays);
-  periodSpendHistory = periodSpendHistory.filter(entry => {
-    const entryDate = parseISO(entry.periodEndDate);
-    return !isBefore(entryDate, cutoffDate);
-  });
+    periods.push(historicalPeriod);
+  }
 
   const newConfig: BudgetConfig = {
     ...config,
@@ -775,7 +770,8 @@ export function handlePeriodTransition(
       periodStartDate: todayStr,
       balance: newBalance,
     },
-    periodSpendHistory,
+    periods,
+    // Keep periodSpendHistory for backwards compat but don't add to it
   };
 
   return {
