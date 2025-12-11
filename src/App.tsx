@@ -9,11 +9,8 @@ import { ProjectionTable } from './components/ProjectionTable';
 import { PeriodDetail } from './components/PeriodDetail';
 import { BottomNav } from './components/BottomNav';
 import { Toast } from './components/Toast';
-// @ts-expect-error - Will be used in Task 10
 import { PeriodConfirmationModal } from './components/PeriodConfirmationModal';
-// @ts-expect-error - Will be used in Task 10
 import { PeriodHistorySummary } from './components/PeriodHistorySummary';
-// @ts-expect-error - Will be used in Task 10
 import { PeriodHistoryView } from './components/PeriodHistoryView';
 import { useCurrentDay } from './hooks/useCurrentDay';
 import { useIsDesktop } from './hooks/useMediaQuery';
@@ -28,11 +25,8 @@ function App() {
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('Projections refreshed');
-  // @ts-expect-error - Will be used in Task 10
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-  // @ts-expect-error - Will be used in Task 10
   const [showHistoryView, setShowHistoryView] = useState(false);
-  // @ts-expect-error - Will be used in Task 10
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     periodEndDate: string;
     projectedBalance: number;
@@ -237,7 +231,6 @@ function App() {
   const recordedPeriodsCount = (config.periodSpendHistory ?? []).length;
 
   // Period confirmation handlers
-  // @ts-expect-error - Will be used in Task 10
   const handlePeriodConfirm = useCallback((
     actualBalance: number,
     explanations: import('./types').VarianceExplanation[]
@@ -272,7 +265,6 @@ function App() {
     setPendingConfirmation(null);
   }, []);
 
-  // @ts-expect-error - Will be used in Task 10
   const handlePeriodDismiss = useCallback(() => {
     // Mark period as completed with projected balance (skip confirmation)
     setConfig(prev => {
@@ -294,7 +286,6 @@ function App() {
     setPendingConfirmation(null);
   }, []);
 
-  // @ts-expect-error - Will be used in Task 10
   const handleRemindLater = useCallback(() => {
     setShowConfirmationModal(false);
     // Don't clear pendingConfirmation - will show again on next load/day change
@@ -341,6 +332,12 @@ function App() {
             onDeleteTransaction={handleDeleteTransaction}
             onBack={() => setSelectedPeriod(null)}
           />
+        ) : showHistoryView ? (
+          /* History View */
+          <PeriodHistoryView
+            periods={config.periods ?? []}
+            onBack={() => setShowHistoryView(false)}
+          />
         ) : (
           /* Main View */
           <>
@@ -354,6 +351,17 @@ function App() {
                 recordedPeriodsCount={recordedPeriodsCount}
               />
             </div>
+
+            {/* Period History Summary */}
+            {(config.budgetStartDate || (config.periods ?? []).length > 0) && (
+              <div className={`mb-4 ${view === 'form' ? 'hidden md:block' : ''}`}>
+                <PeriodHistorySummary
+                  periods={config.periods ?? []}
+                  budgetStartDate={config.budgetStartDate}
+                  onViewHistory={() => setShowHistoryView(true)}
+                />
+              </div>
+            )}
 
             {/* Goal Timeline Summary */}
             {goalDates && config.savingsGoal > 0 && (
@@ -512,6 +520,18 @@ function App() {
         isVisible={showToast}
         onClose={() => setShowToast(false)}
       />
+
+      {/* Period Confirmation Modal */}
+      {pendingConfirmation && (
+        <PeriodConfirmationModal
+          isOpen={showConfirmationModal}
+          periodEndDate={pendingConfirmation.periodEndDate}
+          projectedBalance={pendingConfirmation.projectedBalance}
+          onConfirm={handlePeriodConfirm}
+          onDismiss={handlePeriodDismiss}
+          onRemindLater={handleRemindLater}
+        />
+      )}
     </div>
   );
 }
