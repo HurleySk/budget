@@ -24,10 +24,22 @@ export function migrateToHistoricalPeriods(config: BudgetConfig): BudgetConfig {
   const periods: HistoricalPeriod[] = periodSpendHistory.map((entry, index) => {
     const variance = entry.expectedEnding - entry.actualEnding;
 
+    // Calculate startDate for this period
+    let startDate: string;
+    if (index === 0) {
+      // For first period, use currentBalanceAsOf if available, otherwise use periodEndDate
+      startDate = config.currentBalanceAsOf ?? entry.periodEndDate;
+    } else {
+      // For subsequent periods, use previous period's endDate + 1 day
+      const prevEndDate = new Date(periodSpendHistory[index - 1].periodEndDate);
+      prevEndDate.setDate(prevEndDate.getDate() + 1);
+      startDate = prevEndDate.toISOString().split('T')[0];
+    }
+
     return {
       id: generateUUID(),
       periodNumber: index,
-      startDate: entry.periodEndDate, // Best approximation - old format didn't track start
+      startDate,
       endDate: entry.periodEndDate,
       startingBalance: entry.startingBalance,
       endingBalance: entry.actualEnding,
@@ -38,9 +50,9 @@ export function migrateToHistoricalPeriods(config: BudgetConfig): BudgetConfig {
       adHocExpenses: 0,
       baselineSpend: entry.trueSpend,
       variance,
-      varianceExplanations: variance > 0 ? [{
+      varianceExplanations: variance < 0 ? [{
         reason: 'baseline_miss' as const,
-        amount: variance,
+        amount: Math.abs(variance),
         affectsBaseline: true,
       }] : [],
       status: 'completed' as const,
@@ -48,10 +60,10 @@ export function migrateToHistoricalPeriods(config: BudgetConfig): BudgetConfig {
     };
   });
 
-  // Set budgetStartDate to earliest period or currentBalanceAsOf
+  // Set budgetStartDate to earliest period or currentBalanceAsOf or current date
   const earliestDate = periods.length > 0
     ? periods[0].startDate
-    : config.currentBalanceAsOf;
+    : (config.currentBalanceAsOf ?? new Date().toISOString().split('T')[0]);
 
   return {
     ...config,
