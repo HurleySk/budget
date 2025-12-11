@@ -1,4 +1,5 @@
 import type { BudgetConfig } from './types';
+import { migrateToHistoricalPeriods, needsMigration } from './utils/migration';
 
 /**
  * Save config to JSON file via dev server
@@ -22,7 +23,17 @@ export async function loadBudget(): Promise<BudgetConfig | null> {
   try {
     const response = await fetch('/__load-config');
     if (response.ok) {
-      return await response.json();
+      const config = await response.json() as BudgetConfig;
+
+      // Run migration if needed
+      if (needsMigration(config)) {
+        const migrated = migrateToHistoricalPeriods(config);
+        // Save migrated config
+        await saveBudget(migrated);
+        return migrated;
+      }
+
+      return config;
     }
     return null;
   } catch (error) {
