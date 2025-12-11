@@ -11,6 +11,7 @@ import type {
   MonthlyConfig,
   ExpenseOccurrence,
   PeriodSpendEntry,
+  HistoricalPeriod,
 } from './types';
 
 // Convert frequency to monthly multiplier
@@ -898,4 +899,69 @@ export function advancePassedDates(
     return newConfig;
   }
   return null;
+}
+
+/**
+ * Check if a period needs confirmation from the user.
+ * Returns the period needing confirmation if within grace period.
+ */
+export function getPendingConfirmationPeriod(
+  config: BudgetConfig,
+  today: Date
+): { needsConfirmation: boolean; periodEndDate: string; projectedBalance: number } | null {
+  const graceDays = config.periodConfirmationGraceDays ?? 3;
+  const periods = config.periods ?? [];
+
+  // Find any period with pending-confirmation status
+  const pendingPeriod = periods.find(p => p.status === 'pending-confirmation');
+
+  if (pendingPeriod) {
+    const endDate = parseISO(pendingPeriod.endDate);
+    const daysSinceEnd = differenceInDays(today, endDate);
+
+    // Within grace period
+    if (daysSinceEnd <= graceDays) {
+      return {
+        needsConfirmation: true,
+        periodEndDate: pendingPeriod.endDate,
+        projectedBalance: pendingPeriod.projectedEndingBalance,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Create a new historical period entry when a period ends.
+ */
+export function createHistoricalPeriod(
+  periodNumber: number,
+  startDate: Date,
+  endDate: Date,
+  startingBalance: number,
+  projectedEndingBalance: number,
+  income: number,
+  recurringExpenses: number,
+  adHocIncome: number,
+  adHocExpenses: number,
+  baselineSpend: number
+): HistoricalPeriod {
+  return {
+    id: crypto.randomUUID(),
+    periodNumber,
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0],
+    startingBalance,
+    endingBalance: projectedEndingBalance, // Will be updated on confirmation
+    projectedEndingBalance,
+    income,
+    recurringExpenses,
+    adHocIncome,
+    adHocExpenses,
+    baselineSpend,
+    variance: 0,
+    varianceExplanations: [],
+    status: 'pending-confirmation',
+  };
 }
