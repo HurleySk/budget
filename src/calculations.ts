@@ -385,11 +385,20 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
 
   if (futurePayDates.length === 0) return entries;
 
+  // Calculate period 0 start date
+  // Priority: budgetStartDate (immutable) > currentBalanceAsOf > today
+  // budgetStartDate is the original tracking start date and should never change
+  const period0Start = config.budgetStartDate
+    ? parseISO(config.budgetStartDate)
+    : config.currentBalanceAsOf
+      ? parseISO(config.currentBalanceAsOf)
+      : today;
+
   // Pre-generate all expense occurrences for the entire projection range
   const projectionEnd = addMonths(futurePayDates[futurePayDates.length - 1], 1);
   const allExpenseOccurrences = generateExpenseOccurrences(
     config.recurringExpenses,
-    today,  // Start from today to catch expenses before first paycheck
+    period0Start,  // Start from balance entry date to catch all relevant expenses
     projectionEnd
   );
 
@@ -401,16 +410,17 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
   // Track when goal is reached
   let goalReachedPeriod: number | null = null;
 
-  // === PERIOD 0: Today → Next Paycheck (partial period) ===
+  // === PERIOD 0: Balance Entry Date → Next Paycheck (partial period) ===
+  // period0Start is already calculated above (from currentBalanceAsOf or today)
   const nextPayDate = futurePayDates[0];
-  const daysUntilNextPay = differenceInDays(nextPayDate, today);
+  const daysUntilNextPay = differenceInDays(nextPayDate, period0Start);
 
   // Only add partial period if there are days before next paycheck
   if (daysUntilNextPay > 0) {
-    // Get expenses between today and next paycheck (exclusive of pay date)
+    // Get expenses between balance entry date and next paycheck (exclusive of pay date)
     const partialPeriodExpenses = getExpensesBetweenDates(
       allExpenseOccurrences,
-      today,
+      period0Start,
       addDays(nextPayDate, -1)
     );
     const partialExpenseTotal = partialPeriodExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -855,9 +865,23 @@ export function advancePassedDates(
   }
 
   // 2. Advance each recurring expense's nextDueDate if in the past
+  // BUT only if the expense was due BEFORE currentBalanceAsOf (meaning it's already
+  // accounted for in the balance). This prevents losing expense information when
+  // dates advance but the user hasn't updated their balance yet.
+  const balanceAsOf = config.currentBalanceAsOf
+    ? startOfDay(parseISO(config.currentBalanceAsOf))
+    : null;
+
   const updatedExpenses = config.recurringExpenses.map((expense) => {
     const dueDate = parseISO(expense.nextDueDate);
-    if (isBefore(dueDate, todayStart)) {
+    // Only advance if:
+    // 1. Due date is in the past (before today), AND
+    // 2. Either no balanceAsOf is set (first time), OR the expense was due before
+    //    the balance was entered (so it's already accounted for)
+    const isInPast = isBefore(dueDate, todayStart);
+    const alreadyAccountedFor = !balanceAsOf || isBefore(dueDate, balanceAsOf);
+
+    if (isInPast && alreadyAccountedFor) {
       // Use existing logic to find next occurrence on or after today
       const nextDate = getFirstOccurrenceOnOrAfter(expense, todayStart);
       changed = true;
