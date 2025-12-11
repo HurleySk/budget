@@ -306,6 +306,8 @@ function App() {
       periods: prev.periods ?? [],
       periodSpendHistory: [], // Clear old format
     }));
+    setToastMessage('New budget cycle started');
+    setShowToast(true);
   }, []);
 
   return (

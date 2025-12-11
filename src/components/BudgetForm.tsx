@@ -449,6 +449,7 @@ export function BudgetForm({ config, onChange, onBalanceUpdate, onStartNewCycle,
                     placeholder="0.00"
                     className="w-full pl-7 pr-3 py-2 border border-neutral-300 rounded-lg text-sm"
                     step="0.01"
+                    min="0"
                   />
                 </div>
               </div>
@@ -456,19 +457,25 @@ export function BudgetForm({ config, onChange, onBalanceUpdate, onStartNewCycle,
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  if (newCycleBalance) {
-                    onStartNewCycle(newCycleDate, parseFloat(newCycleBalance));
+                  const balance = parseFloat(newCycleBalance);
+                  if (!isNaN(balance) && balance > 0 && newCycleDate) {
+                    onStartNewCycle(newCycleDate, balance);
                     setShowNewCycleForm(false);
                     setNewCycleBalance('');
+                    setNewCycleDate(new Date().toISOString().split('T')[0]);
                   }
                 }}
-                disabled={!newCycleBalance}
+                disabled={!newCycleBalance || !newCycleDate || isNaN(parseFloat(newCycleBalance)) || parseFloat(newCycleBalance) <= 0}
                 className="px-4 py-2 text-sm font-medium text-white bg-warning-600 hover:bg-warning-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Start New Cycle
               </button>
               <button
-                onClick={() => setShowNewCycleForm(false)}
+                onClick={() => {
+                  setShowNewCycleForm(false);
+                  setNewCycleBalance('');
+                  setNewCycleDate(new Date().toISOString().split('T')[0]);
+                }}
                 className="px-4 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-800"
               >
                 Cancel
