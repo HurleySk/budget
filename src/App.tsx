@@ -1,26 +1,26 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { BudgetConfig, AdHocTransaction } from './types';
 import { DEFAULT_CONFIG } from './types';
-import { generateProjection, calculateGoalDates, formatCurrency, formatDate, advancePassedDates, calculateAverageBaseline, handlePeriodTransition, calculateTrueSpend, getPendingConfirmationPeriod } from './calculations';
+import { generateProjection, formatCurrency, advancePassedDates, calculateAverageBaseline, handlePeriodTransition, calculateTrueSpend, getPendingConfirmationPeriod } from './calculations';
 import { saveBudget, loadBudget } from './storage';
-import { BudgetForm } from './components/BudgetForm';
-import { ProjectionChart } from './components/ProjectionChart';
-import { ProjectionTable } from './components/ProjectionTable';
 import { PeriodDetail } from './components/PeriodDetail';
 import { BottomNav } from './components/BottomNav';
 import { Toast } from './components/Toast';
 import { PeriodConfirmationModal } from './components/PeriodConfirmationModal';
-import { PeriodHistorySummary } from './components/PeriodHistorySummary';
 import { PeriodHistoryView } from './components/PeriodHistoryView';
+import { Dashboard } from './components/Dashboard';
+import { Timeline } from './components/Timeline';
+import { Settings } from './components/Settings';
+import { UpdateBalanceModal } from './components/UpdateBalanceModal';
+import { AddTransactionModal } from './components/AddTransactionModal';
 import { useCurrentDay } from './hooks/useCurrentDay';
-import { useIsDesktop } from './hooks/useMediaQuery';
 import { generateUUID } from './utils/uuid';
 
-type ViewMode = 'form' | 'chart' | 'table';
+type ViewMode = 'dashboard' | 'timeline' | 'settings';
 
 function App() {
   const [config, setConfig] = useState<BudgetConfig>(DEFAULT_CONFIG);
-  const [view, setView] = useState<ViewMode>('chart');
+  const [view, setView] = useState<ViewMode>('dashboard');
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
@@ -31,6 +31,9 @@ function App() {
     periodEndDate: string;
     projectedBalance: number;
   } | null>(null);
+  const [showUpdateBalanceModal, setShowUpdateBalanceModal] = useState(false);
+  const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
+  const [addTransactionDefaultPeriod, setAddTransactionDefaultPeriod] = useState<number | undefined>(undefined);
 
   // Track current day - updates automatically at midnight
   const { currentDay, forceRefresh } = useCurrentDay();
@@ -41,9 +44,6 @@ function App() {
     setToastMessage('Projections refreshed');
     setShowToast(true);
   }, [forceRefresh]);
-
-  // Track if we're on desktop (md breakpoint)
-  const isDesktop = useIsDesktop();
 
   // Load from JSON file on mount
   useEffect(() => {
@@ -124,14 +124,6 @@ function App() {
 
     return generateProjection(config);
   }, [config, currentDay]);
-
-  // Calculate goal dates (memoized)
-  const goalDates = useMemo(() => {
-    if (projection.length === 0) return null;
-    // currentDay ensures "days to goal" updates at midnight
-    void currentDay;
-    return calculateGoalDates(config, projection);
-  }, [config, projection, currentDay]);
 
   // Get selected period data
   const selectedPeriodData = selectedPeriod !== null
@@ -228,8 +220,6 @@ function App() {
     return calculateAverageBaseline(periodSpendHistory, periodsRequired);
   }, [config.periodSpendHistory, config.periodsForBaselineCalc]);
 
-  const recordedPeriodsCount = (config.periodSpendHistory ?? []).length;
-
   // Period confirmation handlers
   const handlePeriodConfirm = useCallback((
     actualBalance: number,
@@ -310,6 +300,26 @@ function App() {
     setShowToast(true);
   }, []);
 
+  const handleUseCalculatedBaseline = useCallback(() => {
+    if (calculatedBaseline) {
+      setConfig(prev => ({
+        ...prev,
+        baselineSpendPerPeriod: Math.round(calculatedBaseline.average * 100) / 100,
+      }));
+      setToastMessage('Baseline updated to calculated average');
+      setShowToast(true);
+    }
+  }, [calculatedBaseline]);
+
+  const handleOpenAddTransaction = useCallback((periodNumber?: number) => {
+    setAddTransactionDefaultPeriod(periodNumber);
+    setShowAddTransactionModal(true);
+  }, []);
+
+  const pendingPeriodForDashboard = useMemo(() => {
+    return (config.periods ?? []).find(p => p.status === 'pending-confirmation') ?? null;
+  }, [config.periods]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -357,167 +367,38 @@ function App() {
             periods={config.periods ?? []}
             onBack={() => setShowHistoryView(false)}
           />
-        ) : (
-          /* Main View */
-          <>
-            {/* Budget Form - Always visible on desktop, conditional on mobile */}
-            <div className={`mb-6 ${view !== 'form' ? 'hidden md:block' : ''}`}>
-              <BudgetForm
-                config={config}
-                onChange={setConfig}
-                onBalanceUpdate={handleBalanceUpdate}
-                onStartNewCycle={handleStartNewCycle}
-                calculatedBaseline={calculatedBaseline}
-                recordedPeriodsCount={recordedPeriodsCount}
-              />
-            </div>
-
-            {/* Period History Summary */}
-            {(config.budgetStartDate || (config.periods ?? []).length > 0) && (
-              <div className={`mb-4 ${view === 'form' ? 'hidden md:block' : ''}`}>
-                <PeriodHistorySummary
-                  periods={config.periods ?? []}
-                  budgetStartDate={config.budgetStartDate}
-                  onViewHistory={() => setShowHistoryView(true)}
-                />
-              </div>
-            )}
-
-            {/* Goal Timeline Summary */}
-            {goalDates && config.savingsGoal > 0 && (
-              <div className={`bg-white rounded-xl border border-neutral-200/60 shadow-sm p-5 mb-6 ${view === 'form' ? 'hidden md:block' : ''}`}>
-                <h3 className="text-base font-semibold text-primary-800 mb-4">
-                  Goal Timeline: <span className="text-accent-600 tabular-nums">{formatCurrency(config.savingsGoal)}</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {goalDates.dateBeforeExpenses ? (
-                    <div className="relative overflow-hidden rounded-xl border border-primary-200 bg-gradient-to-br from-primary-50 to-primary-100/50 p-4">
-                      <div className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 bg-primary-200/30 rounded-full blur-xl"></div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-primary-600 mb-1">
-                        Before Expenses
-                      </p>
-                      <p className="text-lg font-bold text-primary-900 tabular-nums">
-                        {formatDate(goalDates.dateBeforeExpenses)}
-                      </p>
-                      <p className="text-xs text-primary-500 mt-1">
-                        (ignoring all expenses)
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                        Before Expenses
-                      </p>
-                      <p className="text-lg font-bold text-neutral-400">
-                        Not achievable
-                      </p>
-                    </div>
-                  )}
-
-                  {goalDates.dateAfterExpenses ? (
-                    <div className="relative overflow-hidden rounded-xl border border-warning-200 bg-gradient-to-br from-warning-50 to-warning-100/50 p-4">
-                      <div className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 bg-warning-200/30 rounded-full blur-xl"></div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-warning-600 mb-1">
-                        After Expenses
-                      </p>
-                      <p className="text-lg font-bold text-warning-700 tabular-nums">
-                        {formatDate(goalDates.dateAfterExpenses)}
-                      </p>
-                      <p className="text-xs text-warning-600 mt-1">
-                        (after recurring expenses)
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                        After Expenses
-                      </p>
-                      <p className="text-lg font-bold text-neutral-400">
-                        Not achievable
-                      </p>
-                    </div>
-                  )}
-
-                  {goalDates.dateAfterBaseline ? (
-                    <div className="relative overflow-hidden rounded-xl border-2 border-accent-300 bg-gradient-to-br from-accent-50 to-accent-100/50 p-4 ring-1 ring-accent-400/20">
-                      <div className="absolute top-0 right-0 w-20 h-20 -mr-6 -mt-6 bg-accent-300/30 rounded-full blur-2xl"></div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-accent-700 mb-1">
-                        After All Spending
-                      </p>
-                      <p className="text-xl font-bold text-accent-800 tabular-nums">
-                        {formatDate(goalDates.dateAfterBaseline)}
-                      </p>
-                      <p className="text-sm font-medium text-accent-600 mt-1">
-                        {goalDates.daysToGoal > 0
-                          ? `${goalDates.daysToGoal} days (${goalDates.periodsToGoal} pay periods)`
-                          : 'Goal already reached!'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="relative overflow-hidden rounded-xl border-2 border-danger-200 bg-gradient-to-br from-danger-50 to-danger-100/50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-danger-600 mb-1">
-                        After All Spending
-                      </p>
-                      <p className="text-lg font-bold text-danger-700">
-                        Not achievable
-                      </p>
-                      <p className="text-xs text-danger-500 mt-1">
-                        Expenses exceed income
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* View Toggle - Desktop only */}
-            {projection.length > 0 && (
-              <div className={`hidden md:flex justify-center mb-4 ${view === 'form' ? 'md:hidden' : ''}`}>
-                <div className="inline-flex rounded-lg bg-neutral-100 p-1 gap-1">
-                  <button
-                    onClick={() => setView('chart')}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      view === 'chart'
-                        ? 'bg-white text-primary-800 shadow-sm'
-                        : 'text-neutral-600 hover:text-primary-700'
-                    }`}
-                  >
-                    Chart
-                  </button>
-                  <button
-                    onClick={() => setView('table')}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      view === 'table'
-                        ? 'bg-white text-primary-800 shadow-sm'
-                        : 'text-neutral-600 hover:text-primary-700'
-                    }`}
-                  >
-                    Table
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Projection Display - single chart instance to avoid hidden container issues */}
-            {projection.length > 0 && (
-              <>
-                {/* Chart - show when: mobile+chart view, OR desktop+not table view */}
-                {(view === 'chart' || (isDesktop && view !== 'table')) && (
-                  <ProjectionChart data={projection} savingsGoal={config.savingsGoal} />
-                )}
-
-                {/* Table view */}
-                {view === 'table' && (
-                  <ProjectionTable
-                    data={projection}
-                    savingsGoal={config.savingsGoal}
-                    onSelectPeriod={setSelectedPeriod}
-                  />
-                )}
-              </>
-            )}
-          </>
-        )}
+        ) : view === 'dashboard' ? (
+          /* Dashboard View */
+          <Dashboard
+            config={config}
+            projection={projection}
+            calculatedBaseline={calculatedBaseline}
+            pendingPeriod={pendingPeriodForDashboard}
+            onAddExpense={() => handleOpenAddTransaction(0)}
+            onUpdateBalance={() => setShowUpdateBalanceModal(true)}
+            onConfirmPeriod={() => setShowConfirmationModal(true)}
+            onViewTimeline={() => setView('timeline')}
+            onUseCalculatedBaseline={handleUseCalculatedBaseline}
+          />
+        ) : view === 'timeline' ? (
+          /* Timeline View */
+          <Timeline
+            projection={projection}
+            historicalPeriods={config.periods ?? []}
+            adHocTransactions={config.adHocTransactions ?? []}
+            onAddTransaction={handleOpenAddTransaction}
+            onConfirmPeriod={() => setShowConfirmationModal(true)}
+            onBack={() => setView('dashboard')}
+          />
+        ) : view === 'settings' ? (
+          /* Settings View */
+          <Settings
+            config={config}
+            onChange={setConfig}
+            onStartNewCycle={handleStartNewCycle}
+            onBack={() => setView('dashboard')}
+          />
+        ) : null}
       </main>
 
       {/* Footer - hidden on mobile due to bottom nav */}
@@ -552,6 +433,33 @@ function App() {
           onRemindLater={handleRemindLater}
         />
       )}
+
+      {/* Update Balance Modal */}
+      <UpdateBalanceModal
+        isOpen={showUpdateBalanceModal}
+        currentBalance={config.currentBalance}
+        onClose={() => setShowUpdateBalanceModal(false)}
+        onSave={(newBalance: number) => {
+          handleBalanceUpdate(newBalance);
+          setShowUpdateBalanceModal(false);
+        }}
+      />
+
+      {/* Add Transaction Modal */}
+      <AddTransactionModal
+        isOpen={showAddTransactionModal}
+        periods={projection}
+        defaultPeriod={addTransactionDefaultPeriod}
+        onClose={() => {
+          setShowAddTransactionModal(false);
+          setAddTransactionDefaultPeriod(undefined);
+        }}
+        onAdd={(transaction) => {
+          handleAddTransaction(transaction);
+          setShowAddTransactionModal(false);
+          setAddTransactionDefaultPeriod(undefined);
+        }}
+      />
     </div>
   );
 }
