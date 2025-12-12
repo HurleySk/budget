@@ -438,7 +438,8 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
     entries.push({
-      date: today,
+      date: nextPayDate,                 // Period end date (next paycheck)
+      startDate: period0Start,           // Actual period start (budgetStartDate/currentBalanceAsOf/today)
       periodNumber: 0,  // Special "current" period
       income: 0,
       expenses: partialExpenseTotal,
@@ -494,7 +495,8 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
     entries.push({
-      date: periodDate,
+      date: periodEnd,                   // Period end date
+      startDate: periodStart,            // Period start date (this paycheck)
       periodNumber,
       income: config.paycheckAmount,
       expenses: recurringExpenseTotal,

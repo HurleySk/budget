@@ -128,10 +128,8 @@ function PeriodCard({
     future: { text: 'Upcoming', className: 'bg-stone-100 text-stone-500' },
   };
 
-  // Calculate period start date (for period 0, use actual start not today)
-  const periodStartDate = period.periodNumber === 0
-    ? new Date(period.date.getTime() - 14 * 24 * 60 * 60 * 1000) // Approximate: 2 weeks before end
-    : new Date(period.date.getTime() - 14 * 24 * 60 * 60 * 1000);
+  // Use actual period start date from projection
+  const periodStartDate = period.startDate;
 
   return (
     <div className={`card overflow-hidden ${statusStyles[status]}`}>

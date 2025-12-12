@@ -109,7 +109,8 @@ export interface BudgetConfig {
 }
 
 export interface ProjectionEntry {
-  date: Date;
+  date: Date;                           // Period end date
+  startDate: Date;                      // Period start date
   periodNumber: number;
   income: number;
   expenses: number;
