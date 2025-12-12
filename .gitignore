@@ -39,3 +39,6 @@ data/
 
 # Worktrees
 .worktrees/
+
+# Design docs
+docs/plans/
