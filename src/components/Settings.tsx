@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { BudgetConfig, PayFrequency, ExpenseFrequency, RecurringExpense } from '../types';
-import { PAY_FREQUENCY_LABELS, EXPENSE_FREQUENCY_LABELS } from '../types';
+import type { BudgetConfig, PayFrequency, ExpenseFrequency, RecurringExpense, WeekendHandling } from '../types';
+import { PAY_FREQUENCY_LABELS, EXPENSE_FREQUENCY_LABELS, WEEKEND_HANDLING_LABELS } from '../types';
 import { formatCurrency } from '../calculations';
 import { generateUUID } from '../utils/uuid';
 
@@ -165,6 +165,70 @@ export function Settings({
               className="w-full px-3 py-2 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sage-500 bg-white"
             >
               {Object.entries(PAY_FREQUENCY_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Semi-monthly pay day configuration */}
+          {config.paycheckFrequency === 'semimonthly' && (
+            <div className="p-3 bg-stone-50 rounded-xl space-y-3">
+              <p className="text-xs font-medium text-primary-500 uppercase tracking-wider">
+                Pay Days
+              </p>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs text-primary-500 mb-1">First</label>
+                  <select
+                    value={config.semiMonthlyConfig.firstPayDay}
+                    onChange={(e) => onChange({
+                      ...config,
+                      semiMonthlyConfig: {
+                        ...config.semiMonthlyConfig,
+                        firstPayDay: parseInt(e.target.value)
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sage-500 bg-white text-sm"
+                  >
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-primary-500 mb-1">Second</label>
+                  <select
+                    value={config.semiMonthlyConfig.secondPayDay}
+                    onChange={(e) => onChange({
+                      ...config,
+                      semiMonthlyConfig: {
+                        ...config.semiMonthlyConfig,
+                        secondPayDay: parseInt(e.target.value)
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sage-500 bg-white text-sm"
+                  >
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                    <option value={31}>Last day</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Weekend handling */}
+          <div>
+            <label className="block text-sm font-medium text-primary-600 mb-1">
+              If payday falls on weekend
+            </label>
+            <select
+              value={config.weekendHandling}
+              onChange={(e) => onChange({ ...config, weekendHandling: e.target.value as WeekendHandling })}
+              className="w-full px-3 py-2 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sage-500 bg-white"
+            >
+              {Object.entries(WEEKEND_HANDLING_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>

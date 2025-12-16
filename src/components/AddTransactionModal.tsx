@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import type { AdHocTransaction, ProjectionEntry } from '../types';
 import { formatDate } from '../calculations';
 
@@ -36,8 +37,15 @@ export function AddTransactionModal({
     e.preventDefault();
     const numAmount = parseFloat(amount);
     if (name.trim() && !isNaN(numAmount) && numAmount > 0) {
+      // Find the selected period to get its start date
+      const selectedPeriod = periods.find(p => p.periodNumber === periodNumber);
+      const periodStartDate = selectedPeriod
+        ? format(selectedPeriod.startDate, 'yyyy-MM-dd')
+        : undefined;
+
       onAdd({
         periodNumber,
+        periodStartDate,  // Immutable anchor to prevent period drift
         name: name.trim(),
         amount: numAmount,
         isIncome,

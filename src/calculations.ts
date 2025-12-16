@@ -1,4 +1,4 @@
-import { addDays, addWeeks, addMonths, addYears, differenceInDays, parseISO, startOfDay, isBefore, isAfter } from 'date-fns';
+import { addDays, addWeeks, addMonths, addYears, differenceInDays, parseISO, startOfDay, isBefore, isAfter, format } from 'date-fns';
 import type {
   BudgetConfig,
   PayFrequency,
@@ -387,13 +387,15 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
   if (futurePayDates.length === 0) return entries;
 
   // Calculate period 0 start date
-  // Priority: budgetStartDate (immutable) > currentBalanceAsOf > today
-  // budgetStartDate is the original tracking start date and should never change
-  const period0Start = config.budgetStartDate
-    ? parseISO(config.budgetStartDate)
+  // Priority: periodStartSnapshot (actual current period start) > currentBalanceAsOf > budgetStartDate > today
+  // budgetStartDate is for historical reference only - NOT for current period boundaries
+  const period0Start = config.periodStartSnapshot?.periodStartDate
+    ? parseISO(config.periodStartSnapshot.periodStartDate)
     : config.currentBalanceAsOf
       ? parseISO(config.currentBalanceAsOf)
-      : today;
+      : config.budgetStartDate
+        ? parseISO(config.budgetStartDate)
+        : today;
 
   // Pre-generate all expense occurrences for the entire projection range
   const projectionEnd = addMonths(futurePayDates[futurePayDates.length - 1], 1);
@@ -427,13 +429,28 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     const partialExpenseTotal = partialPeriodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Get ad-hoc transactions for period 0
+    // Match by periodStartDate (immutable) if available, otherwise fall back to periodNumber
     const adHocTransactions = config.adHocTransactions ?? [];
-    const period0AdHocs = adHocTransactions.filter(t => t.periodNumber === 0);
+    const period0StartStr = format(period0Start, 'yyyy-MM-dd');
+    const period0AdHocs = adHocTransactions.filter(t => {
+      if (t.periodStartDate) {
+        return t.periodStartDate === period0StartStr;
+      }
+      return t.periodNumber === 0;
+    });
     const period0AdHocIncome = period0AdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
     const period0AdHocExpense = period0AdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
 
-    // Calculate balances for partial period (no paycheck income)
-    balanceAfterIncome = config.currentBalance + period0AdHocIncome;
+    // Check if current period started on a pay date (meaning paycheck was received)
+    // If periodStartSnapshot exists and has a balance, use that as starting point
+    const periodStartedOnPayDate = config.periodStartSnapshot?.periodStartDate === period0StartStr;
+    const period0Income = periodStartedOnPayDate ? config.paycheckAmount : 0;
+
+    // Use snapshot balance (before paycheck) as starting point if available
+    const startingBalance = config.periodStartSnapshot?.balance ?? config.currentBalance;
+
+    // Calculate balances
+    balanceAfterIncome = startingBalance + period0Income + period0AdHocIncome;
     balanceAfterExpenses = balanceAfterIncome - partialExpenseTotal - period0AdHocExpense;
     balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
@@ -441,7 +458,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       date: nextPayDate,                 // Period end date (next paycheck)
       startDate: period0Start,           // Actual period start (budgetStartDate/currentBalanceAsOf/today)
       periodNumber: 0,  // Special "current" period
-      income: 0,
+      income: period0Income,
       expenses: partialExpenseTotal,
       expenseDetails: partialPeriodExpenses,
       adHocIncome: period0AdHocIncome,
@@ -479,8 +496,15 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     const recurringExpenseTotal = periodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
     // Get ad-hoc transactions for this period
+    // Match by periodStartDate (immutable) if available, otherwise fall back to periodNumber
     const adHocTransactions = config.adHocTransactions ?? [];
-    const periodAdHocs = adHocTransactions.filter(t => t.periodNumber === periodNumber);
+    const periodStartStr = format(periodStart, 'yyyy-MM-dd');
+    const periodAdHocs = adHocTransactions.filter(t => {
+      if (t.periodStartDate) {
+        return t.periodStartDate === periodStartStr;
+      }
+      return t.periodNumber === periodNumber;
+    });
     const adHocIncomeTotal = periodAdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
     const adHocExpenseTotal = periodAdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
 
@@ -730,45 +754,32 @@ export function handlePeriodTransition(
   const balanceAsOf = config.currentBalanceAsOf ? parseISO(config.currentBalanceAsOf) : null;
   const userAlreadyUpdated = balanceAsOf && !isBefore(balanceAsOf, passedPayDate);
 
-  if (userAlreadyUpdated) {
-    // User already entered a new starting balance - just ensure snapshot is set
-    const newConfig: BudgetConfig = {
-      ...config,
-      periodStartSnapshot: {
-        periodStartDate: config.currentBalanceAsOf!,
-        balance: config.currentBalance,
-      },
-    };
-    return {
-      transitioned: true,
-      config: newConfig,
-      newBalance: config.currentBalance,
-      trueSpend: 0,
-    };
-  }
-
-  // User hasn't updated - auto-set to projected ending balance
-  // Find period 0 (partial period) or period 1's ending
+  // Find period 0 (partial period) to get expense data for historical record
   const currentPeriod = projection.find(p => p.periodNumber === 0) ?? projection[0];
   if (!currentPeriod) {
     return null;
   }
 
-  const newBalance = currentPeriod.balanceAfterBaseline;
-  let trueSpend = 0;
   const periods = [...(config.periods ?? [])];
+  let trueSpend = 0;
 
-  // Record the period that just ended (if we have a snapshot)
+  // ALWAYS record historical period when transitioning (if we have a snapshot)
+  // This is critical for tracking variance/performance over time
   if (config.periodStartSnapshot) {
-    // Get period data from projection for the period that ended
-    // This is tricky - we need to calculate what the expected ending was
     const startingBalance = config.periodStartSnapshot.balance;
 
-    // For period 0 (partial), use its data; otherwise sum up
-    const income = currentPeriod.income;
+    // Calculate what the projected ending would have been
+    // Period 0 is partial period (no paycheck), so use its expense data
+    const income = currentPeriod.income;  // Should be 0 for period 0
     const expenses = currentPeriod.expenses;
     const adHocIncome = currentPeriod.adHocIncome;
     const adHocExpenses = currentPeriod.adHocExpenses;
+
+    // The actual ending balance is what we have NOW (before adding new paycheck)
+    // If user already updated, use their balance; otherwise calculate from projection
+    const actualEndingBalance = userAlreadyUpdated
+      ? config.currentBalance
+      : currentPeriod.balanceAfterBaseline;
 
     const result = calculateTrueSpend(
       startingBalance,
@@ -776,18 +787,17 @@ export function handlePeriodTransition(
       expenses,
       adHocIncome,
       adHocExpenses,
-      newBalance
+      actualEndingBalance
     );
-
     trueSpend = result.trueSpend;
 
     // Create historical period entry
     const historicalPeriod = createHistoricalPeriod(
-      periods.length,  // Next period number
-      config.periodStartSnapshot ? parseISO(config.periodStartSnapshot.periodStartDate) : passedPayDate,
+      periods.length,
+      parseISO(config.periodStartSnapshot.periodStartDate),
       passedPayDate,
       startingBalance,
-      newBalance,
+      actualEndingBalance,
       income,
       expenses,
       adHocIncome,
@@ -798,6 +808,14 @@ export function handlePeriodTransition(
     periods.push(historicalPeriod);
   }
 
+  // Calculate new balance: period 0 ending + paycheck
+  // Period 0 doesn't include the paycheck (it's the partial period BEFORE payday)
+  // So we need to add the paycheck that just arrived
+  const period0Ending = userAlreadyUpdated
+    ? config.currentBalance
+    : currentPeriod.balanceAfterBaseline;
+  const newBalance = period0Ending + config.paycheckAmount;
+
   const newConfig: BudgetConfig = {
     ...config,
     currentBalance: newBalance,
@@ -807,7 +825,6 @@ export function handlePeriodTransition(
       balance: newBalance,
     },
     periods,
-    // Keep periodSpendHistory for backwards compat but don't add to it
   };
 
   return {
@@ -897,37 +914,11 @@ export function advancePassedDates(
     }
   }
 
-  // 2. Advance each recurring expense's nextDueDate if in the past
-  // BUT only if the expense was due BEFORE currentBalanceAsOf (meaning it's already
-  // accounted for in the balance). This prevents losing expense information when
-  // dates advance but the user hasn't updated their balance yet.
-  const balanceAsOf = config.currentBalanceAsOf
-    ? startOfDay(parseISO(config.currentBalanceAsOf))
-    : null;
-
-  const updatedExpenses = config.recurringExpenses.map((expense) => {
-    const dueDate = parseISO(expense.nextDueDate);
-    // Only advance if:
-    // 1. Due date is in the past (before today), AND
-    // 2. Either no balanceAsOf is set (first time), OR the expense was due before
-    //    the balance was entered (so it's already accounted for)
-    const isInPast = isBefore(dueDate, todayStart);
-    const alreadyAccountedFor = !balanceAsOf || isBefore(dueDate, balanceAsOf);
-
-    if (isInPast && alreadyAccountedFor) {
-      // Use existing logic to find next occurrence on or after today
-      const nextDate = getFirstOccurrenceOnOrAfter(expense, todayStart);
-      changed = true;
-      return {
-        ...expense,
-        nextDueDate: nextDate.toISOString().split('T')[0],
-      };
-    }
-    return expense;
-  });
+  // Recurring expense dates are NOT auto-advanced.
+  // The projection generates all future occurrences based on the pattern.
+  // nextDueDate is just an anchor for the recurring pattern.
 
   if (changed) {
-    newConfig.recurringExpenses = updatedExpenses;
     return newConfig;
   }
   return null;

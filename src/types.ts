@@ -28,10 +28,11 @@ export interface ExpenseOccurrence {
 
 export interface AdHocTransaction {
   id: string;
-  periodNumber: number;  // Which period this applies to (1-based)
+  periodNumber: number;       // Which period this applies to (0-based, relative)
+  periodStartDate?: string;   // ISO date - anchors transaction to specific period (immutable)
   name: string;
-  amount: number;        // Always positive
-  isIncome: boolean;     // true = income, false = expense
+  amount: number;             // Always positive
+  isIncome: boolean;          // true = income, false = expense
 }
 
 export interface PeriodStartSnapshot {
