@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { BudgetConfig, PayFrequency, ExpenseFrequency, RecurringExpense, WeekendHandling } from '../types';
 import { PAY_FREQUENCY_LABELS, EXPENSE_FREQUENCY_LABELS, WEEKEND_HANDLING_LABELS } from '../types';
-import { formatCurrency } from '../calculations';
+import { formatCurrency, getFirstOccurrenceOnOrAfter } from '../calculations';
 import { generateUUID } from '../utils/uuid';
 
 interface SettingsProps {
@@ -336,7 +336,7 @@ export function Settings({
                         {formatCurrency(expense.amount)} · {EXPENSE_FREQUENCY_LABELS[expense.frequency]}
                       </p>
                       <p className="text-xs text-primary-400">
-                        Due: {new Date(expense.nextDueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        Next due: {getFirstOccurrenceOnOrAfter(expense, new Date()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">

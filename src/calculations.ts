@@ -13,6 +13,7 @@ import type {
   PeriodSpendEntry,
   HistoricalPeriod,
 } from './types';
+import { warnIf } from './utils/invariants';
 
 // Convert frequency to monthly multiplier
 const FREQ_TO_MONTHLY: Record<PayFrequency | ExpenseFrequency, number> = {
@@ -191,9 +192,10 @@ function adjustDayForMonth(year: number, month: number, originalDay: number): nu
 }
 
 /**
- * Get the next occurrence of an expense on or after a start date
+ * Get the next occurrence of an expense on or after a start date.
+ * Exported for use in Settings to display accurate "next due" dates.
  */
-function getFirstOccurrenceOnOrAfter(
+export function getFirstOccurrenceOnOrAfter(
   expense: RecurringExpense,
   startDate: Date
 ): Date {
@@ -374,7 +376,14 @@ export function getNetPerPeriod(config: BudgetConfig): number {
  */
 export function generateProjection(config: BudgetConfig, baselineOverride?: number): ProjectionEntry[] {
   const entries: ProjectionEntry[] = [];
-  const effectiveBaseline = baselineOverride ?? config.baselineSpendPerPeriod;
+
+  // Input validation - warn on suspicious values but don't crash
+  warnIf(!config.nextPayDate, 'generateProjection: nextPayDate is missing');
+  warnIf(config.paycheckAmount <= 0, 'generateProjection: paycheckAmount is zero or negative');
+  warnIf(config.baselineSpendPerPeriod < 0, 'generateProjection: baselineSpendPerPeriod is negative');
+
+  // Clamp baseline to non-negative (defensive)
+  const effectiveBaseline = Math.max(0, baselineOverride ?? config.baselineSpendPerPeriod);
 
   // Max periods: 5 years worth (generous estimate)
   const maxPeriods = 260; // ~5 years of weekly pay
@@ -441,13 +450,12 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     const period0AdHocIncome = period0AdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
     const period0AdHocExpense = period0AdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
 
-    // Check if current period started on a pay date (meaning paycheck was received)
-    // If periodStartSnapshot exists and has a balance, use that as starting point
-    const periodStartedOnPayDate = config.periodStartSnapshot?.periodStartDate === period0StartStr;
-    const period0Income = periodStartedOnPayDate ? config.paycheckAmount : 0;
+    // Check if current period received a paycheck (explicit flag, not inferred)
+    const paycheckReceived = config.periodStartSnapshot?.paycheckReceived ?? false;
+    const period0Income = paycheckReceived ? config.paycheckAmount : 0;
 
     // Use snapshot balance (before paycheck) as starting point if available
-    const startingBalance = config.periodStartSnapshot?.balance ?? config.currentBalance;
+    const startingBalance = config.periodStartSnapshot?.balanceBeforePaycheck ?? config.currentBalance;
 
     // Calculate balances
     balanceAfterIncome = startingBalance + period0Income + period0AdHocIncome;
@@ -766,7 +774,7 @@ export function handlePeriodTransition(
   // ALWAYS record historical period when transitioning (if we have a snapshot)
   // This is critical for tracking variance/performance over time
   if (config.periodStartSnapshot) {
-    const startingBalance = config.periodStartSnapshot.balance;
+    const startingBalance = config.periodStartSnapshot.balanceBeforePaycheck;
 
     // Calculate what the projected ending would have been
     // Period 0 is partial period (no paycheck), so use its expense data
@@ -821,8 +829,9 @@ export function handlePeriodTransition(
     currentBalance: newBalance,
     currentBalanceAsOf: todayStr,
     periodStartSnapshot: {
-      periodStartDate: todayStr,
-      balance: newBalance,
+      periodStartDate: format(passedPayDate, 'yyyy-MM-dd'),
+      balanceBeforePaycheck: period0Ending,  // Balance BEFORE the paycheck
+      paycheckReceived: true,                // Paycheck was received at period start
     },
     periods,
   };

@@ -188,9 +188,10 @@ function App() {
         const currentPeriod = projection.find(p => p.periodNumber === 0) ?? projection[0];
 
         if (currentPeriod) {
+          const startingBalance = snapshot.balanceBeforePaycheck + (snapshot.paycheckReceived ? currentPeriod.income : 0);
           const result = calculateTrueSpend(
-            snapshot.balance,
-            currentPeriod.income,
+            startingBalance,
+            snapshot.paycheckReceived ? currentPeriod.income : 0,
             currentPeriod.expenses,
             currentPeriod.adHocIncome,
             currentPeriod.adHocExpenses,
@@ -200,7 +201,7 @@ function App() {
           // Record in history
           const historyEntry = {
             periodEndDate: snapshot.periodStartDate,
-            startingBalance: snapshot.balance,
+            startingBalance: startingBalance,
             expectedEnding: result.expectedEnding,
             actualEnding: newBalance,
             trueSpend: result.trueSpend,
@@ -211,7 +212,7 @@ function App() {
             currentBalance: newBalance,
             currentBalanceAsOf: todayStr,
             periodSpendHistory: [...(prev.periodSpendHistory ?? []), historyEntry],
-            periodStartSnapshot: { periodStartDate: todayStr, balance: newBalance },
+            periodStartSnapshot: { periodStartDate: todayStr, balanceBeforePaycheck: newBalance, paycheckReceived: false },
           };
         }
       }
@@ -222,7 +223,7 @@ function App() {
         currentBalance: newBalance,
         currentBalanceAsOf: todayStr,
         periodStartSnapshot: isFirstUpdate
-          ? { periodStartDate: todayStr, balance: newBalance }
+          ? { periodStartDate: todayStr, balanceBeforePaycheck: newBalance, paycheckReceived: false }
           : prev.periodStartSnapshot,
       };
     });
@@ -309,7 +310,8 @@ function App() {
       currentBalanceAsOf: startDate,
       periodStartSnapshot: {
         periodStartDate: startDate,
-        balance: startingBalance,
+        balanceBeforePaycheck: startingBalance,
+        paycheckReceived: false,
       },
       // Keep existing periods as archive, or clear if desired
       // For now, we keep them but could add an "archived" flag

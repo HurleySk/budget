@@ -101,3 +101,180 @@
 .balance-display {
   @apply font-mono font-medium tabular-nums;
 }
+
+/* ========================================
+   UI Polish - Animations & Micro-interactions
+   ======================================== */
+
+/* Subtle entrance animation for cards */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Apply entrance to main content areas */
+.card {
+  animation: slideUp 0.3s ease-out;
+}
+
+/* Staggered card animations */
+.card:nth-child(1) { animation-delay: 0ms; }
+.card:nth-child(2) { animation-delay: 50ms; }
+.card:nth-child(3) { animation-delay: 100ms; }
+.card:nth-child(4) { animation-delay: 150ms; }
+.card:nth-child(5) { animation-delay: 200ms; }
+
+/* Enhanced card hover state */
+.card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+@media (hover: hover) {
+  .card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Button press feedback */
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Smooth transitions for interactive elements */
+button, a, input, select {
+  transition: all 0.15s ease;
+}
+
+/* Progress bar glow effect */
+.progress-bar-fill {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Subtle gradient overlay on page background */
+body {
+  background: linear-gradient(
+    180deg,
+    var(--color-stone-50) 0%,
+    #f8f7f5 50%,
+    var(--color-stone-100) 100%
+  );
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* Badge/pill animations */
+.badge {
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.badge:hover {
+  transform: scale(1.02);
+}
+
+/* Number change animation helper */
+.number-animate {
+  transition: color 0.3s ease;
+}
+
+/* Positive/negative flash for balance changes */
+@keyframes flashGreen {
+  0%, 100% { color: inherit; }
+  50% { color: var(--color-sage-600); }
+}
+
+@keyframes flashRed {
+  0%, 100% { color: inherit; }
+  50% { color: var(--color-danger-600); }
+}
+
+/* Focus ring improvements */
+*:focus-visible {
+  outline: 2px solid var(--color-sage-500);
+  outline-offset: 2px;
+}
+
+/* Better input focus states */
+input:focus, select:focus {
+  border-color: var(--color-sage-500);
+  box-shadow: 0 0 0 3px rgba(74, 124, 89, 0.1);
+}
+
+/* Tooltip/popover entrance */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.popover {
+  animation: popIn 0.15s ease-out;
+}
+
+/* Loading skeleton shimmer */
+@keyframes skeleton {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-stone-200) 25%,
+    var(--color-stone-100) 50%,
+    var(--color-stone-200) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton 1.5s infinite;
+  border-radius: 4px;
+}
+
+/* Smooth page transitions between views */
+.view-enter {
+  animation: slideUp 0.25s ease-out;
+}
+
+/* Icon button hover glow */
+.icon-btn {
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.icon-btn:hover {
+  background-color: var(--color-stone-100);
+}
+
+.icon-btn:active {
+  transform: scale(0.95);
+}

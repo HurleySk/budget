@@ -36,8 +36,9 @@ export interface AdHocTransaction {
 }
 
 export interface PeriodStartSnapshot {
-  periodStartDate: string;   // ISO date of when this period started
-  balance: number;           // What currentBalance was at period start
+  periodStartDate: string;        // ISO date of when this period started
+  balanceBeforePaycheck: number;  // Balance BEFORE any paycheck for this period
+  paycheckReceived: boolean;      // Whether a paycheck was received at period start
 }
 
 export interface PeriodSpendEntry {

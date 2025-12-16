@@ -214,7 +214,7 @@ export function Dashboard({
 
             {/* Popover */}
             {showVariancePopover && (
-              <div className="absolute left-0 top-full mt-2 z-10 w-64 p-3 bg-stone-50 border border-stone-200 rounded-xl shadow-lg">
+              <div className="absolute left-0 top-full mt-2 z-10 w-64 p-3 bg-stone-50 border border-stone-200 rounded-xl shadow-lg popover">
                 <button
                   onClick={() => setShowVariancePopover(false)}
                   className="absolute top-2 right-2 text-primary-400 hover:text-primary-600"
@@ -268,7 +268,7 @@ export function Dashboard({
         {config.savingsGoal > 0 && (
           <div className="h-2 bg-stone-200 rounded-full overflow-hidden mb-5">
             <div
-              className="h-full bg-sage-500 rounded-full transition-all duration-500"
+              className="h-full bg-sage-500 rounded-full transition-all duration-500 progress-bar-fill"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
