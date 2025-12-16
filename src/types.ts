@@ -106,6 +106,9 @@ export interface BudgetConfig {
 
   // Period confirmation settings
   periodConfirmationGraceDays: number; // Default: 3
+
+  // UI preferences
+  balanceView?: 'afterIncome' | 'afterExpenses' | 'afterBaseline';
 }
 
 export interface ProjectionEntry {
