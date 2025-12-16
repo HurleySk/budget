@@ -93,7 +93,7 @@ export function PeriodDetail({
           <h2 className="text-lg md:text-xl font-bold text-primary-900">
             Period {period.periodNumber}
           </h2>
-          <p className="text-sm text-neutral-500">{format(period.date, 'MMMM d, yyyy')}</p>
+          <p className="text-sm text-neutral-500">{format(period.startDate, 'MMMM d, yyyy')}</p>
         </div>
       </div>
 

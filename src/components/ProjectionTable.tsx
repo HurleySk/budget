@@ -104,7 +104,7 @@ export function ProjectionTable({ data, savingsGoal, onSelectPeriod }: Projectio
                     )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-neutral-800">
-                    {format(entry.date, 'MMM d, yyyy')}
+                    {format(entry.startDate, 'MMM d, yyyy')}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-accent-600 tabular-nums">
                     +{formatCurrency(entry.income + (entry.adHocIncome ?? 0))}
@@ -202,7 +202,7 @@ function ProjectionCard({ entry, isGoalReached, onSelect }: ProjectionCardProps)
           )}
         </div>
         <span className="text-sm font-medium text-neutral-700">
-          {format(entry.date, 'MMM d, yyyy')}
+          {format(entry.startDate, 'MMM d, yyyy')}
         </span>
       </div>
 

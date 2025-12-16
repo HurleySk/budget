@@ -88,7 +88,7 @@ export function AddTransactionModal({
                 {selectablePeriods.slice(0, 10).map((period) => (
                   <option key={period.periodNumber} value={period.periodNumber}>
                     Period {period.periodNumber}
-                    {period.periodNumber === 0 ? ' (Current)' : ''} · {formatDate(period.date)}
+                    {period.periodNumber === 0 ? ' (Current)' : ''} · {formatDate(period.startDate)}
                   </option>
                 ))}
               </select>

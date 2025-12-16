@@ -172,13 +172,12 @@ export function Settings({
 
           {/* Semi-monthly pay day configuration */}
           {config.paycheckFrequency === 'semimonthly' && (
-            <div className="p-3 bg-stone-50 rounded-xl space-y-3">
-              <p className="text-xs font-medium text-primary-500 uppercase tracking-wider">
-                Pay Days
-              </p>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-xs text-primary-500 mb-1">First</label>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-primary-500 mb-1.5">
+                  First pay day
+                </label>
+                <div className="relative">
                   <select
                     value={config.semiMonthlyConfig.firstPayDay}
                     onChange={(e) => onChange({
@@ -188,15 +187,24 @@ export function Settings({
                         firstPayDay: parseInt(e.target.value)
                       }
                     })}
-                    className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sage-500 bg-white text-sm"
+                    className="w-full px-3 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent bg-white text-primary-700 font-medium appearance-none cursor-pointer"
                   >
                     {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
-                      <option key={day} value={day}>{day}</option>
+                      <option key={day} value={day}>{day}{day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'}</option>
                     ))}
                   </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-xs text-primary-500 mb-1">Second</label>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-primary-500 mb-1.5">
+                  Second pay day
+                </label>
+                <div className="relative">
                   <select
                     value={config.semiMonthlyConfig.secondPayDay}
                     onChange={(e) => onChange({
@@ -206,13 +214,18 @@ export function Settings({
                         secondPayDay: parseInt(e.target.value)
                       }
                     })}
-                    className="w-full px-3 py-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sage-500 bg-white text-sm"
+                    className="w-full px-3 py-2.5 border border-stone-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sage-500 focus:border-transparent bg-white text-primary-700 font-medium appearance-none cursor-pointer"
                   >
                     {Array.from({ length: 28 }, (_, i) => i + 1).map(day => (
-                      <option key={day} value={day}>{day}</option>
+                      <option key={day} value={day}>{day}{day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'}</option>
                     ))}
                     <option value={31}>Last day</option>
                   </select>
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             </div>
