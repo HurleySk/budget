@@ -15,7 +15,7 @@ interface DashboardProps {
   onBalanceViewChange: (view: BalanceView) => void;
   onAddExpense: () => void;
   onConfirmPeriod: () => void;
-  onViewTimeline: () => void;
+  onViewTimeline: (periodNumber?: number) => void;
   onViewHistory: () => void;
   onUseCalculatedBaseline: () => void;
 }
@@ -350,7 +350,7 @@ export function Dashboard({
               Upcoming Periods
             </span>
             <button
-              onClick={onViewTimeline}
+              onClick={() => onViewTimeline()}
               className="text-xs font-medium text-sage-600 hover:text-sage-700"
             >
               See all →
@@ -364,9 +364,10 @@ export function Dashboard({
               const hasAdHocExpenses = (period.adHocExpenses ?? 0) > 0;
 
               return (
-                <div
+                <button
                   key={period.periodNumber}
-                  className="bg-stone-50 rounded-xl p-3 border border-stone-200"
+                  onClick={() => onViewTimeline(period.periodNumber)}
+                  className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-left hover:border-sage-300 hover:bg-stone-100/50 transition-colors cursor-pointer"
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between mb-2">
@@ -435,7 +436,7 @@ export function Dashboard({
                     </p>
                     <p className="text-[10px] text-primary-400">{viewLabels[balanceView].short}</p>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -513,7 +514,7 @@ export function Dashboard({
       {/* Navigation Links */}
       <div className="flex flex-col items-center gap-1">
         <button
-          onClick={onViewTimeline}
+          onClick={() => onViewTimeline()}
           className="w-full py-3 flex items-center justify-center gap-2 text-primary-500 hover:text-primary-600 transition-colors"
         >
           <span className="text-sm font-medium">View Full Timeline</span>

@@ -10,6 +10,7 @@ interface TimelineProps {
   historicalPeriods: HistoricalPeriod[];
   adHocTransactions: AdHocTransaction[];
   balanceView: BalanceView;
+  initialExpandedPeriod?: number;
   onBalanceViewChange: (view: BalanceView) => void;
   onAddTransaction: (periodNumber: number) => void;
   onUpdateTransaction: (txn: AdHocTransaction) => void;
@@ -28,6 +29,7 @@ export function Timeline({
   historicalPeriods,
   adHocTransactions,
   balanceView,
+  initialExpandedPeriod,
   onBalanceViewChange,
   onAddTransaction,
   onUpdateTransaction,
@@ -36,7 +38,7 @@ export function Timeline({
   onConfirmPeriod,
   onBack,
 }: TimelineProps) {
-  const [expandedPeriods, setExpandedPeriods] = useState<Set<number>>(() => new Set([0]));
+  const [expandedPeriods, setExpandedPeriods] = useState<Set<number>>(() => new Set([initialExpandedPeriod ?? 0]));
   const [editingTxnId, setEditingTxnId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ name: string; amount: string; isIncome: boolean } | null>(null);
 

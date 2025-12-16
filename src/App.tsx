@@ -36,6 +36,7 @@ function App() {
   const [showUpdateBalanceModal, setShowUpdateBalanceModal] = useState(false);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [addTransactionDefaultPeriod, setAddTransactionDefaultPeriod] = useState<number | undefined>(undefined);
+  const [timelineTargetPeriod, setTimelineTargetPeriod] = useState<number | undefined>(undefined);
 
   // Track current day - updates automatically at midnight
   const { currentDay, forceRefresh } = useCurrentDay();
@@ -419,7 +420,10 @@ function App() {
             onBalanceViewChange={handleBalanceViewChange}
             onAddExpense={() => handleOpenAddTransaction(0)}
             onConfirmPeriod={() => setShowConfirmationModal(true)}
-            onViewTimeline={() => setView('timeline')}
+            onViewTimeline={(periodNumber) => {
+              setTimelineTargetPeriod(periodNumber);
+              setView('timeline');
+            }}
             onViewHistory={() => setShowHistoryView(true)}
             onUseCalculatedBaseline={handleUseCalculatedBaseline}
           />
@@ -430,13 +434,17 @@ function App() {
             historicalPeriods={config.periods ?? []}
             adHocTransactions={config.adHocTransactions ?? []}
             balanceView={balanceView}
+            initialExpandedPeriod={timelineTargetPeriod}
             onBalanceViewChange={handleBalanceViewChange}
             onAddTransaction={handleOpenAddTransaction}
             onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onUpdateStartingBalance={handleUpdateStartingBalance}
             onConfirmPeriod={() => setShowConfirmationModal(true)}
-            onBack={() => setView('dashboard')}
+            onBack={() => {
+              setTimelineTargetPeriod(undefined);
+              setView('dashboard');
+            }}
           />
         ) : view === 'settings' ? (
           /* Settings View */
