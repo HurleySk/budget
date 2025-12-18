@@ -237,11 +237,13 @@ export function Timeline({
       {/* Ledger Table */}
       <div className="card overflow-hidden">
         {/* Desktop Header */}
-        <div className="hidden md:grid grid-cols-[1fr_90px_90px_90px_80px] gap-2 px-4 py-3 bg-stone-50 border-b border-stone-200 text-[10px] font-semibold uppercase tracking-wider text-primary-400">
+        <div className="hidden md:grid grid-cols-[1fr_90px_90px_90px_70px_90px_80px] gap-2 px-4 py-3 bg-stone-50 border-b border-stone-200 text-[10px] font-semibold uppercase tracking-wider text-primary-400">
           <div>Period</div>
           <div className="text-right">After Pay</div>
           <div className="text-right">After Bills</div>
           <div className="text-right">After All</div>
+          <div className="text-right">Swept</div>
+          <div className="text-right">Total Saved</div>
           <div className="text-right">Details</div>
         </div>
 
@@ -257,7 +259,7 @@ export function Timeline({
             return (
               <div key={period.periodNumber}>
                 {/* Main Period Row */}
-                <div className={`grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_90px_90px_90px_80px] gap-2 px-4 py-3 items-center ${
+                <div className={`grid grid-cols-[1fr_auto_auto] md:grid-cols-[1fr_90px_90px_90px_70px_90px_80px] gap-2 px-4 py-3 items-center ${
                   status === 'active' ? 'bg-sage-50/50' : status === 'pending' ? 'bg-warning-50/50' : ''
                 }`}>
                   {/* Period Info */}
@@ -287,6 +289,12 @@ export function Timeline({
                     <p className="text-sm font-mono font-semibold tabular-nums text-primary-800">
                       {formatCurrency(getPrimaryBalance(period))}
                     </p>
+                    {/* Mobile: Show savings if any */}
+                    {period.projectedSweep > 0 && (
+                      <p className="text-[10px] text-sage-600 mt-0.5">
+                        ↗ {formatCurrency(period.projectedSweep)} saved · {formatCurrency(period.projectedCumulativeSavings)} total
+                      </p>
+                    )}
                   </div>
 
                   {/* Mobile: Expand button */}
@@ -320,6 +328,14 @@ export function Timeline({
                     balanceView === 'afterBaseline' ? 'font-semibold text-primary-800' : 'text-primary-500'
                   }`}>
                     {formatCurrency(period.balanceAfterBaseline)}
+                  </div>
+                  {/* Desktop: Swept this period */}
+                  <div className="hidden md:block text-right font-mono text-sm tabular-nums text-sage-600">
+                    {period.projectedSweep > 0 ? formatCurrency(period.projectedSweep) : '—'}
+                  </div>
+                  {/* Desktop: Total saved */}
+                  <div className="hidden md:block text-right font-mono text-sm tabular-nums font-medium text-sage-700">
+                    {period.projectedCumulativeSavings > 0 ? formatCurrency(period.projectedCumulativeSavings) : '—'}
                   </div>
 
                   {/* Desktop: Expand button */}
@@ -690,6 +706,18 @@ export function Timeline({
                               {formatCurrency(period.balanceAfterBaseline)}
                             </span>
                           </div>
+                          {/* Swept to Savings */}
+                          {period.projectedSweep > 0 && (
+                            <div className="flex items-center justify-between py-2 mt-1 bg-sage-50 -mx-4 px-4 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-sage-500">↗</span>
+                                <span className="text-sm font-medium text-sage-700">Swept to Savings</span>
+                              </div>
+                              <span className="text-sm font-mono font-medium tabular-nums text-sage-700">
+                                {formatCurrency(period.projectedSweep)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
