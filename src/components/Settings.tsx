@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { BudgetConfig, PayFrequency, ExpenseFrequency, RecurringExpense, WeekendHandling } from '../types';
-import { PAY_FREQUENCY_LABELS, EXPENSE_FREQUENCY_LABELS, WEEKEND_HANDLING_LABELS } from '../types';
+import type { BudgetConfig, PayFrequency, ExpenseFrequency, RecurringExpense, WeekendHandling, SweepTrigger } from '../types';
+import { PAY_FREQUENCY_LABELS, EXPENSE_FREQUENCY_LABELS, WEEKEND_HANDLING_LABELS, SWEEP_TRIGGER_LABELS } from '../types';
 import { formatCurrency, getFirstOccurrenceOnOrAfter } from '../calculations';
 import { generateUUID } from '../utils/uuid';
 
@@ -466,6 +466,82 @@ export function Settings({
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Savings Sweep Section */}
+      <div className="card p-5">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-primary-500 mb-4">
+          Savings
+        </h2>
+        <div className="space-y-4">
+          {/* Auto-sweep toggle */}
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-primary-600">
+                Auto-sweep to savings
+              </label>
+              <p className="text-xs text-primary-400 mt-0.5">
+                Automatically save excess above your goal
+              </p>
+            </div>
+            <button
+              onClick={() => onChange({ ...config, autoSweepEnabled: !config.autoSweepEnabled })}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                config.autoSweepEnabled ? 'bg-sage-500' : 'bg-stone-300'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  config.autoSweepEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Sweep trigger selector - only show when enabled */}
+          {config.autoSweepEnabled && (
+            <div>
+              <label className="block text-sm font-medium text-primary-600 mb-2">
+                Calculate savings
+              </label>
+              <div className="flex gap-1 p-1 bg-stone-100 rounded-xl">
+                {(['afterIncome', 'afterExpenses', 'afterBaseline'] as SweepTrigger[]).map((trigger) => (
+                  <button
+                    key={trigger}
+                    onClick={() => onChange({ ...config, sweepTrigger: trigger })}
+                    className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                      (config.sweepTrigger ?? 'afterBaseline') === trigger
+                        ? 'bg-white text-primary-800 shadow-sm'
+                        : 'text-primary-500 hover:text-primary-700'
+                    }`}
+                  >
+                    {SWEEP_TRIGGER_LABELS[trigger].short}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-primary-400 mt-2">
+                {SWEEP_TRIGGER_LABELS[config.sweepTrigger ?? 'afterBaseline'].description}
+              </p>
+            </div>
+          )}
+
+          {/* Info about threshold */}
+          {config.autoSweepEnabled && config.savingsGoal > 0 && (
+            <div className="p-3 bg-sage-50 rounded-xl">
+              <p className="text-sm text-sage-700">
+                Amounts above <span className="font-medium">{formatCurrency(config.savingsGoal)}</span> will be swept to savings
+              </p>
+            </div>
+          )}
+
+          {config.autoSweepEnabled && config.savingsGoal <= 0 && (
+            <div className="p-3 bg-warning-50 rounded-xl">
+              <p className="text-sm text-warning-700">
+                Set a savings goal above to enable auto-sweep
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
