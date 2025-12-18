@@ -476,6 +476,8 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
+      projectedSweep: 0,
+      projectedCumulativeSavings: 0,
     });
 
     // Check if goal already reached
@@ -540,6 +542,8 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
+      projectedSweep: 0,
+      projectedCumulativeSavings: 0,
     });
 
     // Check if goal is reached

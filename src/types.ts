@@ -1,6 +1,7 @@
 export type PayFrequency = 'weekly' | 'biweekly' | 'semimonthly' | 'monthly';
 export type ExpenseFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
 export type WeekendHandling = 'before' | 'after' | 'none';
+export type SweepTrigger = 'afterIncome' | 'afterExpenses' | 'afterBaseline';
 
 export interface SemiMonthlyConfig {
   firstPayDay: number;   // 1-31, day of month for first payment
@@ -78,6 +79,8 @@ export interface HistoricalPeriod {
   varianceExplanations: VarianceExplanation[];
   status: 'completed' | 'pending-confirmation' | 'active';
   confirmedAt?: string;        // ISO datetime when user confirmed
+  savingsSwept?: number;
+  cumulativeSavings?: number;
 }
 
 export interface BudgetConfig {
@@ -111,6 +114,10 @@ export interface BudgetConfig {
 
   // UI preferences
   balanceView?: 'afterIncome' | 'afterExpenses' | 'afterBaseline';
+
+  // Savings sweep settings
+  autoSweepEnabled?: boolean;
+  sweepTrigger?: SweepTrigger;
 }
 
 export interface ProjectionEntry {
@@ -127,6 +134,8 @@ export interface ProjectionEntry {
   balanceAfterIncome: number;
   balanceAfterExpenses: number;
   balanceAfterBaseline: number;
+  projectedSweep: number;
+  projectedCumulativeSavings: number;
 }
 
 export interface GoalProjection {
@@ -184,4 +193,22 @@ export const EXPENSE_FREQUENCY_LABELS: Record<ExpenseFrequency, string> = {
   monthly: 'Monthly',
   quarterly: 'Quarterly',
   yearly: 'Yearly',
+};
+
+export const SWEEP_TRIGGER_LABELS: Record<SweepTrigger, { short: string; full: string; description: string }> = {
+  afterIncome: {
+    short: 'After Pay',
+    full: 'After Paycheck',
+    description: 'Sweep immediately after income, before bills'
+  },
+  afterExpenses: {
+    short: 'After Bills',
+    full: 'After Bills',
+    description: 'Sweep after recurring expenses, before baseline'
+  },
+  afterBaseline: {
+    short: 'After All',
+    full: 'After All Spending',
+    description: 'Sweep after all spending (most conservative)'
+  },
 };
