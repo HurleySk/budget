@@ -422,6 +422,9 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
   // Track when goal is reached
   let goalReachedPeriod: number | null = null;
 
+  // Track cumulative savings from sweeps
+  let cumulativeSavings = 0;
+
   // === PERIOD 0: Balance Entry Date → Next Paycheck (partial period) ===
   // period0Start is already calculated above (from currentBalanceAsOf or today)
   const nextPayDate = futurePayDates[0];
@@ -462,6 +465,36 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     balanceAfterExpenses = balanceAfterIncome - partialExpenseTotal - period0AdHocExpense;
     balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
+    // Calculate sweep at trigger point
+    const sweepTrigger = config.sweepTrigger ?? 'afterBaseline';
+    const autoSweepEnabled = config.autoSweepEnabled ?? false;
+
+    // Get balance at trigger point before sweep
+    const balanceBeforeSweep = {
+      balanceAfterIncome,
+      balanceAfterExpenses,
+      balanceAfterBaseline,
+    };
+    const balanceAtTrigger = getBalanceAtTrigger(balanceBeforeSweep, sweepTrigger);
+
+    // Calculate sweep amount
+    const periodSweep = calculateSweepAmount(balanceAtTrigger, config.savingsGoal, autoSweepEnabled);
+    cumulativeSavings += periodSweep;
+
+    // Subtract sweep from balances AFTER the trigger point
+    if (periodSweep > 0) {
+      if (sweepTrigger === 'afterIncome') {
+        balanceAfterIncome -= periodSweep;
+        balanceAfterExpenses -= periodSweep;
+        balanceAfterBaseline -= periodSweep;
+      } else if (sweepTrigger === 'afterExpenses') {
+        balanceAfterExpenses -= periodSweep;
+        balanceAfterBaseline -= periodSweep;
+      } else if (sweepTrigger === 'afterBaseline') {
+        balanceAfterBaseline -= periodSweep;
+      }
+    }
+
     entries.push({
       date: nextPayDate,                 // Period end date (next paycheck)
       startDate: period0Start,           // Actual period start (budgetStartDate/currentBalanceAsOf/today)
@@ -476,8 +509,8 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
-      projectedSweep: 0,
-      projectedCumulativeSavings: 0,
+      projectedSweep: periodSweep,
+      projectedCumulativeSavings: cumulativeSavings,
     });
 
     // Check if goal already reached
@@ -528,6 +561,36 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     // After baseline
     balanceAfterBaseline = balanceAfterExpenses - effectiveBaseline;
 
+    // Calculate sweep at trigger point
+    const sweepTrigger = config.sweepTrigger ?? 'afterBaseline';
+    const autoSweepEnabled = config.autoSweepEnabled ?? false;
+
+    // Get balance at trigger point before sweep
+    const balanceBeforeSweep = {
+      balanceAfterIncome,
+      balanceAfterExpenses,
+      balanceAfterBaseline,
+    };
+    const balanceAtTrigger = getBalanceAtTrigger(balanceBeforeSweep, sweepTrigger);
+
+    // Calculate sweep amount
+    const periodSweep = calculateSweepAmount(balanceAtTrigger, config.savingsGoal, autoSweepEnabled);
+    cumulativeSavings += periodSweep;
+
+    // Subtract sweep from balances AFTER the trigger point
+    if (periodSweep > 0) {
+      if (sweepTrigger === 'afterIncome') {
+        balanceAfterIncome -= periodSweep;
+        balanceAfterExpenses -= periodSweep;
+        balanceAfterBaseline -= periodSweep;
+      } else if (sweepTrigger === 'afterExpenses') {
+        balanceAfterExpenses -= periodSweep;
+        balanceAfterBaseline -= periodSweep;
+      } else if (sweepTrigger === 'afterBaseline') {
+        balanceAfterBaseline -= periodSweep;
+      }
+    }
+
     entries.push({
       date: periodEnd,                   // Period end date
       startDate: periodStart,            // Period start date (this paycheck)
@@ -542,8 +605,8 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
-      projectedSweep: 0,
-      projectedCumulativeSavings: 0,
+      projectedSweep: periodSweep,
+      projectedCumulativeSavings: cumulativeSavings,
     });
 
     // Check if goal is reached
@@ -636,6 +699,37 @@ export function formatDate(date: Date): string {
     day: 'numeric',
     year: 'numeric',
   }).format(date);
+}
+
+/**
+ * Calculate sweep amount at a given trigger point.
+ * Returns the excess above savingsGoal, or 0 if below threshold.
+ */
+export function calculateSweepAmount(
+  balance: number,
+  savingsGoal: number,
+  autoSweepEnabled: boolean
+): number {
+  if (!autoSweepEnabled || savingsGoal <= 0) return 0;
+  return Math.max(0, balance - savingsGoal);
+}
+
+/**
+ * Get the balance at the configured sweep trigger point.
+ */
+export function getBalanceAtTrigger(
+  entry: {
+    balanceAfterIncome: number;
+    balanceAfterExpenses: number;
+    balanceAfterBaseline: number;
+  },
+  trigger: 'afterIncome' | 'afterExpenses' | 'afterBaseline'
+): number {
+  switch (trigger) {
+    case 'afterIncome': return entry.balanceAfterIncome;
+    case 'afterExpenses': return entry.balanceAfterExpenses;
+    case 'afterBaseline': return entry.balanceAfterBaseline;
+  }
 }
 
 /**
