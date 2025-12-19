@@ -103,6 +103,12 @@ export function Dashboard({
   // Get the relevant balance for current period based on selected view
   const currentPeriodBalance = currentPeriod ? getPrimaryBalance(currentPeriod) : config.currentBalance;
 
+  // Get total cumulative savings from latest projection entry
+  const totalSaved = projection.length > 0
+    ? projection[projection.length - 1].projectedCumulativeSavings ?? 0
+    : 0;
+  const showSavingsTotal = config.autoSweepEnabled && totalSaved > 0;
+
   // Popover state for ahead/behind indicator
   const [showVariancePopover, setShowVariancePopover] = useState(false);
 
@@ -271,6 +277,16 @@ export function Dashboard({
               className="h-full bg-sage-500 rounded-full transition-all duration-500 progress-bar-fill"
               style={{ width: `${progressPercent}%` }}
             />
+          </div>
+        )}
+
+        {/* Total Saved - only show if auto-sweep enabled and has savings */}
+        {showSavingsTotal && (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xs text-sage-500">↗</span>
+            <span className="text-sm text-sage-600">
+              Saved so far: <span className="font-mono font-medium">{formatCurrency(totalSaved)}</span>
+            </span>
           </div>
         )}
 
