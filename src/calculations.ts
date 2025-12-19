@@ -897,6 +897,10 @@ export function handlePeriodTransition(
     );
     trueSpend = result.trueSpend;
 
+    // Extract sweep data from current period
+    const periodSweep = currentPeriod.projectedSweep ?? 0;
+    const periodCumulativeSavings = currentPeriod.projectedCumulativeSavings ?? 0;
+
     // Create historical period entry
     const historicalPeriod = createHistoricalPeriod(
       periods.length,
@@ -908,7 +912,9 @@ export function handlePeriodTransition(
       expenses,
       adHocIncome,
       adHocExpenses,
-      currentPeriod.baselineSpend
+      currentPeriod.baselineSpend,
+      periodSweep,
+      periodCumulativeSavings
     );
 
     periods.push(historicalPeriod);
@@ -1075,7 +1081,9 @@ export function createHistoricalPeriod(
   recurringExpenses: number,
   adHocIncome: number,
   adHocExpenses: number,
-  baselineSpend: number
+  baselineSpend: number,
+  savingsSwept: number = 0,
+  cumulativeSavings: number = 0
 ): HistoricalPeriod {
   return {
     id: crypto.randomUUID(),
@@ -1093,5 +1101,7 @@ export function createHistoricalPeriod(
     variance: 0,
     varianceExplanations: [],
     status: 'pending-confirmation',
+    savingsSwept,
+    cumulativeSavings,
   };
 }
