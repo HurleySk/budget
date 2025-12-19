@@ -1,17 +1,41 @@
 # Budget Tracker
 
-A financial projection tool that forecasts your cash flow based on income, recurring expenses, and spending habits. See when you'll reach your savings goals by projecting your balance across pay periods.
+A financial projection tool that forecasts cash flow based on income, recurring expenses, and spending habits. See when you'll reach your savings goals by projecting your balance across pay periods.
 
 ## Features
 
-- Real-time balance projections across multiple pay periods
-- Multiple pay frequencies: weekly, bi-weekly, semi-monthly, monthly
-- Recurring expense tracking with flexible frequencies (weekly to yearly)
-- Ad-hoc transactions for one-time income/expenses
-- Visual charts and detailed period breakdowns
-- Goal tracking with milestone scenarios
-- Actual balance tracking with calculated baseline averages
-- Mobile-responsive design
+### Projection Engine
+- Balance projections across pay periods
+- Pay frequencies: weekly, bi-weekly, semi-monthly, monthly
+- Weekend handling (Friday before or Monday after)
+- Configurable semi-monthly pay days
+
+### Expense & Transaction Tracking
+- Recurring expenses with flexible frequencies (weekly to yearly)
+- Ad-hoc one-time transactions per period
+- Baseline spending estimate for discretionary costs
+
+### Three Balance Views
+- **After Pay** - Balance after paycheck received
+- **After Bills** - Balance after recurring expenses
+- **After All** - Balance after baseline spending (most conservative)
+
+### Savings
+- Goal tracking with projected reach date
+- **Auto-sweep** - Automatically save excess above goal threshold
+- Configurable trigger: after pay, after bills, or after all spending
+- Per-period and cumulative savings tracking
+
+### Period Management
+- Confirm actual balances at period end
+- Variance tracking with categorized explanations
+- Calculated baseline from confirmed period history
+- Historical period records
+
+### Views
+- **Dashboard** - Goal progress, current period summary
+- **Timeline** - Period-by-period breakdown with inline editing
+- **Settings** - Income, expenses, savings configuration
 
 ## Tech Stack
 
@@ -26,27 +50,15 @@ A financial projection tool that forecasts your cash flow based on income, recur
 ```bash
 npm install
 npm run dev
+
+# Access from other devices on network:
+npm run dev -- --host 0.0.0.0
 ```
+
+Data is stored in `data/budget.json`.
 
 ## Build
 
 ```bash
 npm run build
 ```
-
-## Usage
-
-1. Enter your current balance and paycheck details
-2. Add recurring expenses (rent, subscriptions, etc.)
-3. Set a baseline spend estimate for discretionary spending
-4. Set a savings goal
-5. View projections as charts or tables to see when you'll reach your goal
-
-### Actual Balance Tracking
-
-For more accurate projections, record your actual ending balance after each pay period:
-
-1. Click on a past period in the table view
-2. Enter your actual ending balance
-3. After tracking 8 periods, a calculated baseline becomes available
-4. Toggle "Use calculated baseline" to replace your estimate with real spending data

@@ -435,6 +435,7 @@ function App() {
             adHocTransactions={config.adHocTransactions ?? []}
             balanceView={balanceView}
             initialExpandedPeriod={timelineTargetPeriod}
+            autoSweepEnabled={config.autoSweepEnabled ?? false}
             onBalanceViewChange={handleBalanceViewChange}
             onAddTransaction={handleOpenAddTransaction}
             onUpdateTransaction={handleUpdateTransaction}
