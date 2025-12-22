@@ -103,11 +103,9 @@ export function Dashboard({
   // Get the relevant balance for current period based on selected view
   const currentPeriodBalance = currentPeriod ? getPrimaryBalance(currentPeriod) : config.currentBalance;
 
-  // Get total cumulative savings from latest projection entry
-  const totalSaved = projection.length > 0
-    ? projection[projection.length - 1].projectedCumulativeSavings ?? 0
-    : 0;
-  const showSavingsTotal = config.autoSweepEnabled && totalSaved > 0;
+  // Get cumulative savings from current period only (not entire projection)
+  const totalSaved = currentPeriod?.projectedCumulativeSavings ?? 0;
+  const showSavingsTotal = config.autoSweepEnabled === true && totalSaved > 0;
 
   // Popover state for ahead/behind indicator
   const [showVariancePopover, setShowVariancePopover] = useState(false);
@@ -118,13 +116,13 @@ export function Dashboard({
     ? completedPeriods.reduce((sum, p) => sum + (p.variance ?? 0), 0) / completedPeriods.length
     : null;
 
-  // Current period variance: compare actual starting balance to what was projected
-  // This requires finding the previous period's projectedEndingBalance
+  // Current period variance: compare previous period's actual ending to what was projected
   const previousPeriod = completedPeriods.length > 0
     ? completedPeriods[completedPeriods.length - 1]
     : null;
+  // Use the historical period's stored values for accurate comparison
   const currentPeriodVariance = previousPeriod
-    ? config.currentBalance - previousPeriod.projectedEndingBalance
+    ? previousPeriod.endingBalance - previousPeriod.projectedEndingBalance
     : null;
 
   // Determine if user is ahead, behind, or on track (within $25 threshold)
@@ -378,6 +376,7 @@ export function Dashboard({
             {previewPeriods.map((period) => {
               const hasAdHocIncome = (period.adHocIncome ?? 0) > 0;
               const hasAdHocExpenses = (period.adHocExpenses ?? 0) > 0;
+              const hasSwept = config.autoSweepEnabled && (period.projectedSweep ?? 0) > 0;
 
               return (
                 <button
@@ -443,6 +442,15 @@ export function Dashboard({
                         -{formatCurrency(period.baselineSpend)}
                       </span>
                     </div>
+                    {/* Swept to savings */}
+                    {hasSwept && (
+                      <div className="flex justify-between">
+                        <span className="text-sage-500">↗ Swept</span>
+                        <span className="font-mono tabular-nums text-sage-600 font-medium">
+                          {formatCurrency(period.projectedSweep)}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Ending balance - based on selected view */}

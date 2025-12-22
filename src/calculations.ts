@@ -422,8 +422,9 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
   // Track when goal is reached
   let goalReachedPeriod: number | null = null;
 
-  // Track cumulative savings from sweeps
-  let cumulativeSavings = 0;
+  // Track cumulative savings from sweeps - initialize from historical periods
+  const completedPeriods = config.periods?.filter(p => p.status === 'completed') ?? [];
+  let cumulativeSavings = completedPeriods.reduce((sum, p) => sum + (p.savingsSwept ?? 0), 0);
 
   // === PERIOD 0: Balance Entry Date → Next Paycheck (partial period) ===
   // period0Start is already calculated above (from currentBalanceAsOf or today)
@@ -654,14 +655,16 @@ export function calculateGoalDates(
     // Skip partial period (Period 0) - goal should only be based on full periods
     if (entry.periodNumber === 0) continue;
 
+    // Use startDate (when period begins) not date (when period ends)
+    // Goal is reached at the START of the period when balance crosses threshold
     if (dateBeforeExpenses === null && entry.balanceAfterIncome >= config.savingsGoal) {
-      dateBeforeExpenses = entry.date;
+      dateBeforeExpenses = entry.startDate;
     }
     if (dateAfterExpenses === null && entry.balanceAfterExpenses >= config.savingsGoal) {
-      dateAfterExpenses = entry.date;
+      dateAfterExpenses = entry.startDate;
     }
     if (dateAfterBaseline === null && entry.balanceAfterBaseline >= config.savingsGoal) {
-      dateAfterBaseline = entry.date;
+      dateAfterBaseline = entry.startDate;
       periodsToGoal = entry.periodNumber;
     }
   }
