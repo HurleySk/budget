@@ -83,6 +83,42 @@ export interface HistoricalPeriod {
   cumulativeSavings?: number;
 }
 
+// Static Periods Model Types
+// These are NEW types for the static periods implementation.
+// HistoricalPeriod above is kept for backward compatibility during migration.
+
+export interface Transaction {
+  id: string;
+  name: string;
+  amount: number;
+  date: string;                    // ISO date (YYYY-MM-DD)
+  type: 'recurring' | 'adhoc';
+  isIncome: boolean;
+  recurringExpenseId?: string;     // Links to RecurringExpense.id if type is 'recurring'
+}
+
+export interface Period {
+  id: string;                      // e.g., "period-2026-01-01"
+  startDate: string;               // ISO date - when period begins
+  endDate: string;                 // ISO date - when period ends
+  status: 'active' | 'completed';
+
+  // Balance tracking
+  calculatedStartingBalance: number;  // Previous period's computed ending
+  actualStartingBalance?: number;     // User override
+  income: number;                     // Paycheck + adhoc income
+
+  // Embedded transactions
+  transactions: Transaction[];
+
+  // Spending
+  baselineSpend: number;
+
+  // Sweep data (optional)
+  savingsSwept?: number;
+  cumulativeSavings?: number;
+}
+
 export interface BudgetConfig {
   currentBalance: number;
   paycheckAmount: number;
@@ -144,6 +180,12 @@ export interface GoalProjection {
   dateAfterBaseline: Date | null;
   periodsToGoal: number;
   daysToGoal: number;
+  // Flags indicating if dates are mathematical estimates (beyond projection window)
+  isEstimateBeforeExpenses?: boolean;
+  isEstimateAfterExpenses?: boolean;
+  isEstimateAfterBaseline?: boolean;
+  // Reason if goal is unreachable (null if reachable)
+  unreachableReason?: 'negative_net' | 'zero_net' | null;
 }
 
 export const DEFAULT_CONFIG: BudgetConfig = {
