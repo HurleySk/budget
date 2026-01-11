@@ -1,5 +1,6 @@
 import type { BudgetConfig } from './types';
 import { migrateToHistoricalPeriods, needsMigration } from './utils/migration';
+import { migrateToStaticPeriods, needsStaticPeriodsMigration } from './utils/migrationV2';
 
 /**
  * Save config to JSON file via dev server
@@ -23,14 +24,18 @@ export async function loadBudget(): Promise<BudgetConfig | null> {
   try {
     const response = await fetch('/__load-config');
     if (response.ok) {
-      const config = await response.json() as BudgetConfig;
+      let config = await response.json() as BudgetConfig;
 
-      // Run migration if needed
+      // Run old migration if needed
       if (needsMigration(config)) {
-        const migrated = migrateToHistoricalPeriods(config);
-        // Save migrated config
-        await saveBudget(migrated);
-        return migrated;
+        config = migrateToHistoricalPeriods(config);
+        await saveBudget(config);
+      }
+
+      // Run static periods migration if needed
+      if (needsStaticPeriodsMigration(config)) {
+        config = migrateToStaticPeriods(config);
+        await saveBudget(config);
       }
 
       return config;
