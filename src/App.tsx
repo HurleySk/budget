@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
-import type { BudgetConfig, AdHocTransaction } from './types';
+import type { BudgetConfig, AdHocTransaction, Period, Transaction } from './types';
 import { DEFAULT_CONFIG } from './types';
-import { generateProjection, formatCurrency, advancePassedDates, calculateAverageBaseline, handlePeriodTransition, calculateTrueSpend, getPendingConfirmationPeriod, calculateGoalDates } from './calculations';
+import { generateProjection, calculateAverageBaseline, getPendingConfirmationPeriod, calculateGoalDates } from './calculations';
 import { saveBudget, loadBudget } from './storage';
 import { PeriodDetail } from './components/PeriodDetail';
 import { BottomNav } from './components/BottomNav';
@@ -41,6 +41,32 @@ function App() {
   // Track current day - updates automatically at midnight
   const { currentDay, forceRefresh } = useCurrentDay();
 
+  // Helper to get the active period (from static periods model)
+  // Note: During migration, config.periods is typed as HistoricalPeriod[] but may contain Period objects
+  // TODO: Will be used once full migration to static periods is complete
+  const _getActivePeriod = useCallback((): Period | undefined => {
+    const periods = config.periods as unknown as Period[];
+    return periods.find(p => p.status === 'active');
+  }, [config.periods]);
+
+  // Helper to update the active period
+  // Note: During migration, we cast through unknown to handle the type transition
+  const updateActivePeriod = useCallback((updater: (period: Period) => Period) => {
+    setConfig(prev => {
+      const periods = prev.periods as unknown as Period[];
+      const updatedPeriods = periods.map(p =>
+        p.status === 'active' ? updater(p) : p
+      );
+      return {
+        ...prev,
+        periods: updatedPeriods as unknown as typeof prev.periods,
+      };
+    });
+  }, []);
+
+  // Suppress unused variable warnings for static periods helpers (will be used after full migration)
+  void _getActivePeriod;
+
   // Wrapped refresh handler that shows toast
   const handleRefresh = useCallback(() => {
     forceRefresh();
@@ -65,34 +91,12 @@ function App() {
     }
   }, [config, isLoaded]);
 
-  // Auto-advance any dates that have passed (on load and day change)
-  // Also handle period transitions (update currentBalance)
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    const today = new Date();
-
-    // First, generate current projection to use for transition calculation
-    const currentProjection = generateProjection(config);
-
-    // Handle period transition FIRST (updates currentBalance)
-    const transitionResult = handlePeriodTransition(config, today, currentProjection);
-    if (transitionResult) {
-      setToastMessage(`Balance updated to ${formatCurrency(transitionResult.newBalance)}`);
-      setShowToast(true);
-
-      // Then advance dates on the transitioned config
-      const advanced = advancePassedDates(transitionResult.config, today);
-      setConfig(advanced ?? transitionResult.config);
-    } else {
-      // No transition, just advance dates
-      const advanced = advancePassedDates(config, today);
-      if (advanced) {
-        setConfig(advanced);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, currentDay]); // Intentionally exclude config to avoid infinite loop
+  // NOTE: Period transition logic has been removed.
+  // In the static periods model:
+  // - Periods are pre-generated and stored in config.periods
+  // - Period transitions are handled by the period management system
+  // - Balance is tracked via actualStartingBalance on each period
+  // - No need for handlePeriodTransition or advancePassedDates
 
   // Check for pending period confirmations
   useEffect(() => {
@@ -133,7 +137,7 @@ function App() {
     ? projection.find(p => p.periodNumber === selectedPeriod)
     : null;
 
-  // Ad-hoc transaction CRUD handlers
+  // Ad-hoc transaction CRUD handlers (legacy - for backward compatibility)
   const handleAddTransaction = (txn: Omit<AdHocTransaction, 'id'>) => {
     setConfig(prev => ({
       ...prev,
@@ -143,6 +147,27 @@ function App() {
       ]
     }));
   };
+
+  // Add transaction directly to active period (static periods model)
+  // TODO: Will be used once full migration to static periods is complete
+  const _handleAddTransactionToActivePeriod = useCallback((name: string, amount: number, isIncome: boolean) => {
+    const newTransaction: Transaction = {
+      id: generateUUID(),
+      name,
+      amount,
+      date: new Date().toISOString().split('T')[0],
+      type: 'adhoc',
+      isIncome,
+    };
+
+    updateActivePeriod(period => ({
+      ...period,
+      transactions: [...period.transactions, newTransaction],
+    }));
+  }, [updateActivePeriod]);
+
+  // Suppress unused variable warning (will be used after full migration)
+  void _handleAddTransactionToActivePeriod;
 
   const handleUpdateTransaction = (txn: AdHocTransaction) => {
     setConfig(prev => ({
@@ -174,61 +199,13 @@ function App() {
   };
 
   // Handle starting balance update from user
+  // In static periods model, this sets actualStartingBalance on the active period
   const handleBalanceUpdate = useCallback((newBalance: number) => {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-
-    setConfig(prev => {
-      // Check if this is a new period (user entering balance after transition)
-      const isFirstUpdate = !prev.periodStartSnapshot;
-      const snapshot = prev.periodStartSnapshot;
-
-      // If we have a snapshot from a previous period, calculate true spend
-      if (snapshot && snapshot.periodStartDate !== todayStr) {
-        // Find the current period in projection to get income/expense data
-        const currentPeriod = projection.find(p => p.periodNumber === 0) ?? projection[0];
-
-        if (currentPeriod) {
-          const startingBalance = snapshot.balanceBeforePaycheck + (snapshot.paycheckReceived ? currentPeriod.income : 0);
-          const result = calculateTrueSpend(
-            startingBalance,
-            snapshot.paycheckReceived ? currentPeriod.income : 0,
-            currentPeriod.expenses,
-            currentPeriod.adHocIncome,
-            currentPeriod.adHocExpenses,
-            newBalance
-          );
-
-          // Record in history
-          const historyEntry = {
-            periodEndDate: snapshot.periodStartDate,
-            startingBalance: startingBalance,
-            expectedEnding: result.expectedEnding,
-            actualEnding: newBalance,
-            trueSpend: result.trueSpend,
-          };
-
-          return {
-            ...prev,
-            currentBalance: newBalance,
-            currentBalanceAsOf: todayStr,
-            periodSpendHistory: [...(prev.periodSpendHistory ?? []), historyEntry],
-            periodStartSnapshot: { periodStartDate: todayStr, balanceBeforePaycheck: newBalance, paycheckReceived: false },
-          };
-        }
-      }
-
-      // Same period or first update - just update balance
-      return {
-        ...prev,
-        currentBalance: newBalance,
-        currentBalanceAsOf: todayStr,
-        periodStartSnapshot: isFirstUpdate
-          ? { periodStartDate: todayStr, balanceBeforePaycheck: newBalance, paycheckReceived: false }
-          : prev.periodStartSnapshot,
-      };
-    });
-  }, [projection]);
+    updateActivePeriod(period => ({
+      ...period,
+      actualStartingBalance: newBalance,
+    }));
+  }, [updateActivePeriod]);
 
   // Calculate average baseline from period spend history
   const calculatedBaseline = useMemo(() => {
