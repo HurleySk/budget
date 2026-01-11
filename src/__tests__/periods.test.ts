@@ -3,8 +3,10 @@ import {
   getEffectiveStartingBalance,
   calculatePeriodEndingBalance,
   calculatePeriodExpenses,
+  createPeriod,
+  generateRecurringTransactions,
 } from '../periods';
-import type { Period, Transaction } from '../types';
+import type { Period, Transaction, RecurringExpense } from '../types';
 
 describe('getEffectiveStartingBalance', () => {
   it('returns actualStartingBalance when set', () => {
@@ -101,5 +103,60 @@ describe('calculatePeriodEndingBalance', () => {
     };
     // 1000 + 3000 + 500 - 500 = 4000
     expect(calculatePeriodEndingBalance(period)).toBe(4000);
+  });
+});
+
+describe('generateRecurringTransactions', () => {
+  it('generates transactions for expenses within date range', () => {
+    const expenses: RecurringExpense[] = [
+      { id: 'exp-1', name: 'Rent', amount: 1500, frequency: 'monthly', nextDueDate: '2026-01-01' },
+      { id: 'exp-2', name: 'Internet', amount: 80, frequency: 'monthly', nextDueDate: '2026-01-15' },
+    ];
+    const transactions = generateRecurringTransactions(
+      expenses,
+      '2026-01-01',
+      '2026-01-14'
+    );
+
+    expect(transactions).toHaveLength(1);
+    expect(transactions[0].name).toBe('Rent');
+    expect(transactions[0].amount).toBe(1500);
+    expect(transactions[0].type).toBe('recurring');
+    expect(transactions[0].recurringExpenseId).toBe('exp-1');
+  });
+
+  it('excludes expenses outside date range', () => {
+    const expenses: RecurringExpense[] = [
+      { id: 'exp-1', name: 'Rent', amount: 1500, frequency: 'monthly', nextDueDate: '2026-02-01' },
+    ];
+    const transactions = generateRecurringTransactions(
+      expenses,
+      '2026-01-01',
+      '2026-01-31'
+    );
+
+    expect(transactions).toHaveLength(0);
+  });
+});
+
+describe('createPeriod', () => {
+  it('creates a new active period with recurring transactions', () => {
+    const expenses: RecurringExpense[] = [
+      { id: 'exp-1', name: 'Rent', amount: 1500, frequency: 'monthly', nextDueDate: '2026-01-01' },
+    ];
+
+    const period = createPeriod({
+      startDate: '2026-01-01',
+      endDate: '2026-01-15',
+      calculatedStartingBalance: 1000,
+      income: 3000,
+      baselineSpend: 500,
+      recurringExpenses: expenses,
+    });
+
+    expect(period.id).toMatch(/^period-2026-01-01-/);
+    expect(period.status).toBe('active');
+    expect(period.transactions).toHaveLength(1);
+    expect(period.transactions[0].name).toBe('Rent');
   });
 });

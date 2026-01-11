@@ -1,4 +1,7 @@
-import type { Period, Transaction } from './types';
+import type { Period, Transaction, RecurringExpense } from './types';
+import { generateUUID } from './utils/uuid';
+import { generateExpenseOccurrences } from './calculations';
+import { parseISO, startOfDay, addDays } from 'date-fns';
 
 /**
  * Get the effective starting balance for a period.
@@ -36,4 +39,81 @@ export function calculatePeriodEndingBalance(period: Period): number {
   const adhocIncome = calculatePeriodAdhocIncome(period.transactions);
 
   return startingBalance + period.income + adhocIncome - expenses - period.baselineSpend;
+}
+
+/**
+ * Generate recurring expense transactions for a date range.
+ */
+export function generateRecurringTransactions(
+  recurringExpenses: RecurringExpense[],
+  periodStart: string,
+  periodEnd: string
+): Transaction[] {
+  const startDate = parseISO(periodStart);
+  const endDate = parseISO(periodEnd);
+
+  const occurrences = generateExpenseOccurrences(
+    recurringExpenses,
+    startDate,
+    addDays(endDate, 1)  // Include end date
+  );
+
+  // Filter to only those within the period
+  const filtered = occurrences.filter(occ => {
+    const occDate = startOfDay(occ.date);
+    return occDate >= startOfDay(startDate) && occDate <= startOfDay(endDate);
+  });
+
+  return filtered.map(occ => ({
+    id: generateUUID(),
+    name: occ.name,
+    amount: occ.amount,
+    date: occ.date.toISOString().split('T')[0],
+    type: 'recurring' as const,
+    isIncome: false,
+    recurringExpenseId: occ.expenseId,
+  }));
+}
+
+interface CreatePeriodParams {
+  startDate: string;
+  endDate: string;
+  calculatedStartingBalance: number;
+  income: number;
+  baselineSpend: number;
+  recurringExpenses: RecurringExpense[];
+  actualStartingBalance?: number;
+}
+
+/**
+ * Create a new period with generated recurring transactions.
+ */
+export function createPeriod(params: CreatePeriodParams): Period {
+  const {
+    startDate,
+    endDate,
+    calculatedStartingBalance,
+    income,
+    baselineSpend,
+    recurringExpenses,
+    actualStartingBalance,
+  } = params;
+
+  const transactions = generateRecurringTransactions(
+    recurringExpenses,
+    startDate,
+    endDate
+  );
+
+  return {
+    id: `period-${startDate}-${generateUUID().slice(0, 8)}`,
+    startDate,
+    endDate,
+    status: 'active',
+    calculatedStartingBalance,
+    actualStartingBalance,
+    income,
+    transactions,
+    baselineSpend,
+  };
 }
