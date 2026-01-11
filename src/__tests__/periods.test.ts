@@ -5,6 +5,8 @@ import {
   calculatePeriodExpenses,
   createPeriod,
   generateRecurringTransactions,
+  completePeriod,
+  transitionToNewPeriod,
 } from '../periods';
 import type { Period, Transaction, RecurringExpense } from '../types';
 
@@ -158,5 +160,61 @@ describe('createPeriod', () => {
     expect(period.status).toBe('active');
     expect(period.transactions).toHaveLength(1);
     expect(period.transactions[0].name).toBe('Rent');
+  });
+});
+
+describe('completePeriod', () => {
+  it('marks period as completed', () => {
+    const period: Period = {
+      id: 'p1',
+      startDate: '2026-01-01',
+      endDate: '2026-01-15',
+      status: 'active',
+      calculatedStartingBalance: 1000,
+      income: 3000,
+      transactions: [],
+      baselineSpend: 500,
+    };
+
+    const completed = completePeriod(period);
+
+    expect(completed.status).toBe('completed');
+    expect(completed.id).toBe(period.id);
+  });
+});
+
+describe('transitionToNewPeriod', () => {
+  it('completes old period and creates new one', () => {
+    const oldPeriod: Period = {
+      id: 'p1',
+      startDate: '2026-01-01',
+      endDate: '2026-01-15',
+      status: 'active',
+      calculatedStartingBalance: 1000,
+      income: 3000,
+      transactions: [
+        { id: '1', name: 'Rent', amount: 1500, date: '2026-01-01', type: 'recurring', isIncome: false },
+      ],
+      baselineSpend: 500,
+    };
+
+    const recurringExpenses: RecurringExpense[] = [
+      { id: 'exp-1', name: 'Rent', amount: 1500, frequency: 'monthly', nextDueDate: '2026-02-01' },
+    ];
+
+    const { completedPeriod, newPeriod } = transitionToNewPeriod({
+      currentPeriod: oldPeriod,
+      newEndDate: '2026-01-31',
+      income: 3000,
+      baselineSpend: 500,
+      recurringExpenses,
+    });
+
+    expect(completedPeriod.status).toBe('completed');
+    expect(newPeriod.status).toBe('active');
+    expect(newPeriod.startDate).toBe('2026-01-15');
+    expect(newPeriod.endDate).toBe('2026-01-31');
+    // Old period ending: 1000 + 3000 - 1500 - 500 = 2000
+    expect(newPeriod.calculatedStartingBalance).toBe(2000);
   });
 });

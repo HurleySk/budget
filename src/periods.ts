@@ -117,3 +117,45 @@ export function createPeriod(params: CreatePeriodParams): Period {
     baselineSpend,
   };
 }
+
+/**
+ * Mark a period as completed.
+ */
+export function completePeriod(period: Period): Period {
+  return {
+    ...period,
+    status: 'completed',
+  };
+}
+
+interface TransitionParams {
+  currentPeriod: Period;
+  newEndDate: string;
+  income: number;
+  baselineSpend: number;
+  recurringExpenses: RecurringExpense[];
+}
+
+/**
+ * Complete the current period and create a new active period.
+ */
+export function transitionToNewPeriod(params: TransitionParams): {
+  completedPeriod: Period;
+  newPeriod: Period;
+} {
+  const { currentPeriod, newEndDate, income, baselineSpend, recurringExpenses } = params;
+
+  const completedPeriod = completePeriod(currentPeriod);
+  const newStartingBalance = calculatePeriodEndingBalance(currentPeriod);
+
+  const newPeriod = createPeriod({
+    startDate: currentPeriod.endDate,
+    endDate: newEndDate,
+    calculatedStartingBalance: newStartingBalance,
+    income,
+    baselineSpend,
+    recurringExpenses,
+  });
+
+  return { completedPeriod, newPeriod };
+}
