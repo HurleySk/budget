@@ -1,7 +1,12 @@
 import { useState } from 'react';
-import type { BudgetConfig, ProjectionEntry, HistoricalPeriod, GoalProjection } from '../types';
+import type { BudgetConfig, ProjectionEntry, HistoricalPeriod, GoalProjection, Period } from '../types';
 import { formatCurrency } from '../calculations';
 import { format } from 'date-fns';
+import {
+  getEffectiveStartingBalance,
+  calculatePeriodExpenses,
+  calculatePeriodAdhocIncome,
+} from '../periods';
 
 type BalanceView = 'afterIncome' | 'afterExpenses' | 'afterBaseline';
 
@@ -78,8 +83,15 @@ export function Dashboard({
     afterBaseline: { short: 'After All', full: 'After All Spending', progressLabel: 'After all spending' },
   };
 
-  // Find the actual current period using date comparison (not hardcoded period 0)
-  const getCurrentPeriod = (): ProjectionEntry | null => {
+  // Find the active period from static periods model
+  // Note: config.periods is typed as HistoricalPeriod[] but may contain Period objects after migration
+  const getActivePeriod = (): Period | null => {
+    const periods = config.periods as unknown as Period[];
+    return periods.find(p => p.status === 'active') ?? null;
+  };
+
+  // Find the current period from projection (for future periods preview)
+  const getCurrentPeriodFromProjection = (): ProjectionEntry | null => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -98,13 +110,43 @@ export function Dashboard({
     return projection[0] ?? null;
   };
 
-  const currentPeriod = getCurrentPeriod();
+  const activePeriod = getActivePeriod();
+  const currentPeriodFromProjection = getCurrentPeriodFromProjection();
+
+  // Calculate balances from active period (static periods model)
+  // This is the source of truth for the current period
+  const calculateBalancesFromActivePeriod = () => {
+    if (!activePeriod) {
+      return {
+        afterIncome: config.currentBalance,
+        afterExpenses: config.currentBalance,
+        afterBaseline: config.currentBalance,
+      };
+    }
+
+    const startingBalance = getEffectiveStartingBalance(activePeriod);
+    const adhocIncome = calculatePeriodAdhocIncome(activePeriod.transactions);
+    const expenses = calculatePeriodExpenses(activePeriod.transactions);
+
+    const afterIncome = startingBalance + activePeriod.income + adhocIncome;
+    const afterExpenses = afterIncome - expenses;
+    const afterBaseline = afterExpenses - activePeriod.baselineSpend;
+
+    return { afterIncome, afterExpenses, afterBaseline };
+  };
+
+  const activeBalances = calculateBalancesFromActivePeriod();
 
   // Get the relevant balance for current period based on selected view
-  const currentPeriodBalance = currentPeriod ? getPrimaryBalance(currentPeriod) : config.currentBalance;
+  // Prefer active period balances, fall back to projection
+  const currentPeriodBalance = activePeriod
+    ? activeBalances[balanceView]
+    : currentPeriodFromProjection
+      ? getPrimaryBalance(currentPeriodFromProjection)
+      : config.currentBalance;
 
-  // Get cumulative savings from current period only (not entire projection)
-  const totalSaved = currentPeriod?.projectedCumulativeSavings ?? 0;
+  // Get cumulative savings from active period or projection
+  const totalSaved = activePeriod?.cumulativeSavings ?? currentPeriodFromProjection?.projectedCumulativeSavings ?? 0;
   const showSavingsTotal = config.autoSweepEnabled === true && totalSaved > 0;
 
   // Popover state for ahead/behind indicator
@@ -310,16 +352,29 @@ export function Dashboard({
                 </div>
                 {selectedGoalDate ? (
                   <div className="text-right">
-                    <p className="text-lg font-mono font-semibold tabular-nums text-primary-800">
-                      {formatShortDate(selectedGoalDate)}
-                    </p>
-                    <p className="text-xs text-primary-500">
-                      {weeksUntil(selectedGoalDate)} weeks
-                    </p>
+                    {(() => {
+                      const isEstimate = balanceView === 'afterIncome' ? goalDates.isEstimateBeforeExpenses :
+                                         balanceView === 'afterExpenses' ? goalDates.isEstimateAfterExpenses :
+                                         goalDates.isEstimateAfterBaseline;
+                      return (
+                        <>
+                          <p className="text-lg font-mono font-semibold tabular-nums text-primary-800">
+                            {isEstimate ? '~' : ''}{formatShortDate(selectedGoalDate)}
+                          </p>
+                          <p className="text-xs text-primary-500">
+                            {isEstimate ? 'estimated' : `${weeksUntil(selectedGoalDate)} weeks`}
+                          </p>
+                        </>
+                      );
+                    })()}
                   </div>
-                ) : (
-                  <p className="text-sm text-warning-600">Beyond projection</p>
-                )}
+                ) : goalDates.unreachableReason ? (
+                  <p className="text-sm text-warning-600">
+                    {goalDates.unreachableReason === 'negative_net'
+                      ? 'Spending exceeds income'
+                      : 'Adjust budget to reach goal'}
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -331,6 +386,9 @@ export function Dashboard({
                   const date = view === 'afterIncome' ? goalDates.dateBeforeExpenses :
                                view === 'afterExpenses' ? goalDates.dateAfterExpenses :
                                goalDates.dateAfterBaseline;
+                  const isEstimate = view === 'afterIncome' ? goalDates.isEstimateBeforeExpenses :
+                                     view === 'afterExpenses' ? goalDates.isEstimateAfterExpenses :
+                                     goalDates.isEstimateAfterBaseline;
                   return (
                     <button
                       key={view}
@@ -339,7 +397,7 @@ export function Dashboard({
                     >
                       <p className="text-primary-500 mb-1">{viewLabels[view].short}</p>
                       <p className="font-mono tabular-nums text-primary-700">
-                        {date ? formatShortDate(date) : '—'}
+                        {date ? `${isEstimate ? '~' : ''}${formatShortDate(date)}` : '—'}
                       </p>
                     </button>
                   );
@@ -387,9 +445,9 @@ export function Dashboard({
                   {/* Header */}
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-primary-500">
-                      {currentPeriod && period.periodNumber === currentPeriod.periodNumber ? 'Now' : `P${period.periodNumber}`}
+                      {currentPeriodFromProjection && period.periodNumber === currentPeriodFromProjection.periodNumber ? 'Now' : `P${period.periodNumber}`}
                     </span>
-                    {currentPeriod && period.periodNumber === currentPeriod.periodNumber && (
+                    {currentPeriodFromProjection && period.periodNumber === currentPeriodFromProjection.periodNumber && (
                       <span className="px-1.5 py-0.5 bg-sage-100 text-sage-700 text-[10px] font-medium rounded-full">
                         Active
                       </span>
