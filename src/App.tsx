@@ -43,8 +43,7 @@ function App() {
 
   // Helper to get the active period (from static periods model)
   // Note: During migration, config.periods is typed as HistoricalPeriod[] but may contain Period objects
-  // TODO: Will be used once full migration to static periods is complete
-  const _getActivePeriod = useCallback((): Period | undefined => {
+  const getActivePeriod = useCallback((): Period | undefined => {
     const periods = config.periods as unknown as Period[];
     return periods.find(p => p.status === 'active');
   }, [config.periods]);
@@ -63,9 +62,6 @@ function App() {
       };
     });
   }, []);
-
-  // Suppress unused variable warnings for static periods helpers (will be used after full migration)
-  void _getActivePeriod;
 
   // Wrapped refresh handler that shows toast
   const handleRefresh = useCallback(() => {
@@ -137,53 +133,94 @@ function App() {
     ? projection.find(p => p.periodNumber === selectedPeriod)
     : null;
 
-  // Ad-hoc transaction CRUD handlers (legacy - for backward compatibility)
-  const handleAddTransaction = (txn: Omit<AdHocTransaction, 'id'>) => {
-    setConfig(prev => ({
-      ...prev,
-      adHocTransactions: [
-        ...(prev.adHocTransactions ?? []),
-        { ...txn, id: generateUUID() }
-      ]
-    }));
-  };
+  // Add transaction - uses static periods model for active period, legacy for future periods
+  const handleAddTransaction = useCallback((txn: Omit<AdHocTransaction, 'id'>) => {
+    const activePeriod = getActivePeriod();
 
-  // Add transaction directly to active period (static periods model)
-  // TODO: Will be used once full migration to static periods is complete
-  const _handleAddTransactionToActivePeriod = useCallback((name: string, amount: number, isIncome: boolean) => {
-    const newTransaction: Transaction = {
-      id: generateUUID(),
-      name,
-      amount,
-      date: new Date().toISOString().split('T')[0],
-      type: 'adhoc',
-      isIncome,
-    };
+    // Check if this transaction is for the active period
+    // Match by periodStartDate if available, otherwise by periodNumber === 0
+    const isForActivePeriod = activePeriod && (
+      (txn.periodStartDate && txn.periodStartDate === activePeriod.startDate) ||
+      (!txn.periodStartDate && txn.periodNumber === 0)
+    );
 
-    updateActivePeriod(period => ({
-      ...period,
-      transactions: [...period.transactions, newTransaction],
-    }));
-  }, [updateActivePeriod]);
+    if (isForActivePeriod && activePeriod) {
+      // Add directly to active period's transactions (static periods model)
+      const newTransaction: Transaction = {
+        id: generateUUID(),
+        name: txn.name,
+        amount: txn.amount,
+        date: txn.periodStartDate ?? new Date().toISOString().split('T')[0],
+        type: 'adhoc',
+        isIncome: txn.isIncome,
+      };
 
-  // Suppress unused variable warning (will be used after full migration)
-  void _handleAddTransactionToActivePeriod;
+      updateActivePeriod(period => ({
+        ...period,
+        transactions: [...period.transactions, newTransaction],
+      }));
+    } else {
+      // For future periods, still use legacy adHocTransactions array
+      // (future periods are projections, not stored)
+      setConfig(prev => ({
+        ...prev,
+        adHocTransactions: [
+          ...(prev.adHocTransactions ?? []),
+          { ...txn, id: generateUUID() }
+        ]
+      }));
+    }
+  }, [getActivePeriod, updateActivePeriod]);
 
-  const handleUpdateTransaction = (txn: AdHocTransaction) => {
-    setConfig(prev => ({
-      ...prev,
-      adHocTransactions: (prev.adHocTransactions ?? []).map(t =>
-        t.id === txn.id ? txn : t
-      )
-    }));
-  };
+  // Update transaction - checks active period first, then legacy array
+  const handleUpdateTransaction = useCallback((txn: AdHocTransaction) => {
+    const activePeriod = getActivePeriod();
 
-  const handleDeleteTransaction = (id: string) => {
-    setConfig(prev => ({
-      ...prev,
-      adHocTransactions: (prev.adHocTransactions ?? []).filter(t => t.id !== id)
-    }));
-  };
+    // Check if transaction exists in active period
+    const inActivePeriod = activePeriod?.transactions.some(t => t.id === txn.id);
+
+    if (inActivePeriod) {
+      // Update in active period's transactions
+      updateActivePeriod(period => ({
+        ...period,
+        transactions: period.transactions.map(t =>
+          t.id === txn.id
+            ? { ...t, name: txn.name, amount: txn.amount, isIncome: txn.isIncome }
+            : t
+        ),
+      }));
+    } else {
+      // Update in legacy adHocTransactions array
+      setConfig(prev => ({
+        ...prev,
+        adHocTransactions: (prev.adHocTransactions ?? []).map(t =>
+          t.id === txn.id ? txn : t
+        )
+      }));
+    }
+  }, [getActivePeriod, updateActivePeriod]);
+
+  // Delete transaction - checks active period first, then legacy array
+  const handleDeleteTransaction = useCallback((id: string) => {
+    const activePeriod = getActivePeriod();
+
+    // Check if transaction exists in active period
+    const inActivePeriod = activePeriod?.transactions.some(t => t.id === id);
+
+    if (inActivePeriod) {
+      // Delete from active period's transactions (only adhoc can be deleted)
+      updateActivePeriod(period => ({
+        ...period,
+        transactions: period.transactions.filter(t => t.id !== id || t.type === 'recurring'),
+      }));
+    } else {
+      // Delete from legacy adHocTransactions array
+      setConfig(prev => ({
+        ...prev,
+        adHocTransactions: (prev.adHocTransactions ?? []).filter(t => t.id !== id)
+      }));
+    }
+  }, [getActivePeriod, updateActivePeriod]);
 
   // Handle starting balance update from Timeline (any started period)
   const handleUpdateStartingBalance = (periodNumber: number, balance: number) => {

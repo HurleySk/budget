@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { migrateToStaticPeriods, needsStaticPeriodsMigration } from '../utils/migrationV2';
-import type { BudgetConfig } from '../types';
+import type { BudgetConfig, Period } from '../types';
 
 describe('needsStaticPeriodsMigration', () => {
   it('returns true when adHocTransactions has items', () => {
@@ -63,8 +63,12 @@ describe('migrateToStaticPeriods', () => {
 
     const newConfig = migrateToStaticPeriods(oldConfig);
 
+    // Cast periods to the new Period type for testing
+    // (BudgetConfig.periods is typed as HistoricalPeriod[] but migration returns Period[])
+    const periods = newConfig.periods as unknown as Period[];
+
     // Should have created an active period
-    const activePeriod = newConfig.periods.find(p => p.status === 'active');
+    const activePeriod = periods.find(p => p.status === 'active');
     expect(activePeriod).toBeDefined();
     expect(activePeriod!.startDate).toBe('2026-01-01');
 

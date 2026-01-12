@@ -43,8 +43,12 @@ function convertAdhocTransaction(adhoc: AdHocTransaction): Transaction {
  * 2. Creates an active period from periodStartSnapshot if it exists
  * 3. Embeds adhoc transactions into their respective periods
  * 4. Clears the old adHocTransactions array and periodStartSnapshot
+ *
+ * Note: Returns BudgetConfig but the periods array now contains Period objects.
+ * This is a temporary type mismatch during migration - the type will be updated
+ * in Task 11 to properly reflect the new model.
  */
-export function migrateToStaticPeriods(config: BudgetConfig): BudgetConfig & { periods: Period[] } {
+export function migrateToStaticPeriods(config: BudgetConfig): BudgetConfig {
   const newPeriods: Period[] = [];
 
   // Convert existing completed historical periods
@@ -122,13 +126,13 @@ export function migrateToStaticPeriods(config: BudgetConfig): BudgetConfig & { p
   }
 
   // Return new config with migrated data
-  // Note: We cast periods to any temporarily since BudgetConfig.periods is typed as HistoricalPeriod[]
-  // This will be resolved when the type definition is updated in a later task
+  // Note: We cast periods through unknown since BudgetConfig.periods is typed as HistoricalPeriod[]
+  // but we're storing Period objects. This will be resolved when the type definition is updated.
   return {
     ...config,
-    periods: newPeriods,
+    periods: newPeriods as unknown as typeof config.periods,
     adHocTransactions: [],  // Clear old array
     periodStartSnapshot: undefined,  // Remove old snapshot
     currentBalanceAsOf: undefined,  // No longer needed
-  } as BudgetConfig & { periods: Period[] };
+  };
 }
