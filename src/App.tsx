@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
-import type { BudgetConfig, AdHocTransaction, Period, Transaction } from './types';
-import { DEFAULT_CONFIG } from './types';
+import type { BudgetConfig, AdHocTransaction, Period, Transaction, HistoricalPeriod } from './types';
+import { DEFAULT_CONFIG, isHistoricalPeriod } from './types';
 import { generateProjection, calculateAverageBaseline, getPendingConfirmationPeriod, calculateGoalDates } from './calculations';
 import { saveBudget, loadBudget } from './storage';
 import { PeriodDetail } from './components/PeriodDetail';
@@ -267,16 +267,19 @@ function App() {
 
       if (pendingIndex !== -1) {
         const period = periods[pendingIndex];
-        const variance = period.projectedEndingBalance - actualBalance;
+        // Only process HistoricalPeriod objects for period confirmation
+        if (isHistoricalPeriod(period)) {
+          const variance = period.projectedEndingBalance - actualBalance;
 
-        periods[pendingIndex] = {
-          ...period,
-          endingBalance: actualBalance,
-          variance,
-          varianceExplanations: explanations,
-          status: 'completed',
-          confirmedAt: new Date().toISOString(),
-        };
+          periods[pendingIndex] = {
+            ...period,
+            endingBalance: actualBalance,
+            variance,
+            varianceExplanations: explanations,
+            status: 'completed',
+            confirmedAt: new Date().toISOString(),
+          };
+        }
       }
 
       return {
@@ -359,9 +362,14 @@ function App() {
     setConfig(prev => ({ ...prev, balanceView: view }));
   }, []);
 
-  const pendingPeriodForDashboard = useMemo(() => {
-    return (config.periods ?? []).find(p => p.status === 'pending-confirmation') ?? null;
+  // Filter to only HistoricalPeriod objects for legacy components
+  const historicalPeriods = useMemo(() => {
+    return (config.periods ?? []).filter(isHistoricalPeriod) as HistoricalPeriod[];
   }, [config.periods]);
+
+  const pendingPeriodForDashboard = useMemo(() => {
+    return historicalPeriods.find(p => p.status === 'pending-confirmation') ?? null;
+  }, [historicalPeriods]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -419,7 +427,7 @@ function App() {
         ) : showHistoryView ? (
           /* History View */
           <PeriodHistoryView
-            periods={config.periods ?? []}
+            periods={historicalPeriods}
             onBack={() => setShowHistoryView(false)}
           />
         ) : view === 'dashboard' ? (
@@ -445,7 +453,7 @@ function App() {
           /* Timeline View */
           <Timeline
             projection={projection}
-            historicalPeriods={config.periods ?? []}
+            historicalPeriods={historicalPeriods}
             adHocTransactions={config.adHocTransactions ?? []}
             balanceView={balanceView}
             initialExpandedPeriod={timelineTargetPeriod}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { VarianceReason, VarianceExplanation } from '../types';
 import { formatCurrency } from '../calculations';
+import { generateUUID } from '../utils/uuid';
 
 interface PeriodConfirmationModalProps {
   isOpen: boolean;
@@ -59,7 +60,7 @@ export function PeriodConfirmationModal({
     setVarianceEntries((prev) => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         reason: 'adhoc_expense',
         amount: '',
         description: '',

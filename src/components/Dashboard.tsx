@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { BudgetConfig, ProjectionEntry, HistoricalPeriod, GoalProjection, Period } from '../types';
+import { isHistoricalPeriod } from '../types';
 import { formatCurrency } from '../calculations';
 import { format } from 'date-fns';
 import {
@@ -153,14 +154,16 @@ export function Dashboard({
   const [showVariancePopover, setShowVariancePopover] = useState(false);
 
   // Calculate variance from completed periods (cumulative trend)
-  const completedPeriods = (config.periods ?? []).filter(p => p.status === 'completed');
-  const cumulativeVariance = completedPeriods.length > 0
-    ? completedPeriods.reduce((sum, p) => sum + (p.variance ?? 0), 0) / completedPeriods.length
+  // Only use HistoricalPeriod objects which have variance data
+  const completedHistoricalPeriods = (config.periods ?? [])
+    .filter(p => p.status === 'completed' && isHistoricalPeriod(p)) as HistoricalPeriod[];
+  const cumulativeVariance = completedHistoricalPeriods.length > 0
+    ? completedHistoricalPeriods.reduce((sum, p) => sum + (p.variance ?? 0), 0) / completedHistoricalPeriods.length
     : null;
 
   // Current period variance: compare previous period's actual ending to what was projected
-  const previousPeriod = completedPeriods.length > 0
-    ? completedPeriods[completedPeriods.length - 1]
+  const previousPeriod = completedHistoricalPeriods.length > 0
+    ? completedHistoricalPeriods[completedHistoricalPeriods.length - 1]
     : null;
   // Use the historical period's stored values for accurate comparison
   const currentPeriodVariance = previousPeriod
@@ -285,10 +288,10 @@ export function Dashboard({
                   </div>
                 )}
 
-                {completedPeriods.length >= 2 && cumulativeVariance !== null && (
+                {completedHistoricalPeriods.length >= 2 && cumulativeVariance !== null && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-primary-400 mb-1">
-                      Overall Trend ({completedPeriods.length} periods)
+                      Overall Trend ({completedHistoricalPeriods.length} periods)
                     </p>
                     <p className="text-sm text-primary-700">
                       Averaging{' '}
@@ -300,7 +303,7 @@ export function Dashboard({
                   </div>
                 )}
 
-                {completedPeriods.length === 0 && currentPeriodVariance === null && (
+                {completedHistoricalPeriods.length === 0 && currentPeriodVariance === null && (
                   <p className="text-sm text-primary-500">
                     Complete a pay period to see variance tracking.
                   </p>

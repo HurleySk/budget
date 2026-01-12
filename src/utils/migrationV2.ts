@@ -1,4 +1,5 @@
-import type { BudgetConfig, Period, Transaction, AdHocTransaction } from '../types';
+import type { BudgetConfig, Period, Transaction, AdHocTransaction, HistoricalPeriod } from '../types';
+import { isHistoricalPeriod } from '../types';
 import { generateUUID } from './uuid';
 import { generateRecurringTransactions } from '../periods';
 import { generatePayDates } from '../calculations';
@@ -51,8 +52,9 @@ function convertAdhocTransaction(adhoc: AdHocTransaction): Transaction {
 export function migrateToStaticPeriods(config: BudgetConfig): BudgetConfig {
   const newPeriods: Period[] = [];
 
-  // Convert existing completed historical periods
-  for (const oldPeriod of config.periods) {
+  // Convert existing completed historical periods (only process HistoricalPeriod, skip already-migrated Period)
+  const historicalPeriods = config.periods.filter(isHistoricalPeriod) as HistoricalPeriod[];
+  for (const oldPeriod of historicalPeriods) {
     if (oldPeriod.status === 'completed' || oldPeriod.status === 'pending-confirmation') {
       // Find adhoc transactions for this period
       const periodAdhocs = config.adHocTransactions.filter(

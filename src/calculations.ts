@@ -14,6 +14,7 @@ import type {
   HistoricalPeriod,
   Period,
 } from './types';
+import { isHistoricalPeriod } from './types';
 import { warnIf } from './utils/invariants';
 import { generateUUID } from './utils/uuid';
 import { getEffectiveStartingBalance } from './periods';
@@ -1261,10 +1262,13 @@ export function getPendingConfirmationPeriod(
   const graceDays = config.periodConfirmationGraceDays ?? 3;
   const periods = config.periods ?? [];
 
-  // Find any period with pending-confirmation status
-  const pendingPeriod = periods.find(p => p.status === 'pending-confirmation');
+  // Find any HistoricalPeriod with pending-confirmation status
+  // (Period objects use a different workflow and don't have this status)
+  const pendingPeriod = periods.find(p =>
+    p.status === 'pending-confirmation' && isHistoricalPeriod(p)
+  );
 
-  if (pendingPeriod) {
+  if (pendingPeriod && isHistoricalPeriod(pendingPeriod)) {
     const endDate = parseISO(pendingPeriod.endDate);
     const daysSinceEnd = differenceInDays(today, endDate);
 

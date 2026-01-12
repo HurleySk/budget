@@ -128,13 +128,24 @@ export interface BudgetConfig {
   semiMonthlyConfig: SemiMonthlyConfig;  // Pay days for semi-monthly
   monthlyConfig: MonthlyConfig;     // Pay day for monthly
   recurringExpenses: RecurringExpense[];
-  adHocTransactions: AdHocTransaction[];
   baselineSpendPerPeriod: number;
   savingsGoal: number;
-  // Starting balance tracking
-  currentBalanceAsOf?: string;      // ISO date - when user last updated currentBalance
-  periodStartSnapshot?: PeriodStartSnapshot;  // Snapshot at period start for true spend calc
-  periodSpendHistory: PeriodSpendEntry[];     // History of true spend per period
+
+  // @deprecated - Transactions are now embedded in Period.transactions
+  // Kept for backward compatibility with future period projections
+  adHocTransactions: AdHocTransaction[];
+
+  // @deprecated - No longer used after static periods migration
+  // Balance is now tracked in Period.actualStartingBalance
+  currentBalanceAsOf?: string;
+
+  // @deprecated - No longer used after static periods migration
+  // Active period is now stored directly in periods array
+  periodStartSnapshot?: PeriodStartSnapshot;
+
+  // @deprecated - Variance is now tracked in Period records
+  periodSpendHistory: PeriodSpendEntry[];
+
   periodsForBaselineCalc: number;    // Default: 8
   useCalculatedBaseline: boolean;    // Toggle: use calculated vs manual
   transitionHistoryRetentionDays: number;  // Default: 7
@@ -142,8 +153,9 @@ export interface BudgetConfig {
   // Immutable budget tracking start
   budgetStartDate?: string;           // ISO date - when tracking began (immutable once set)
 
-  // Historical period records
-  periods: HistoricalPeriod[];        // All historical periods
+  // Period records - may contain HistoricalPeriod (legacy) or Period (static model) objects
+  // After migration, this array contains Period objects with status 'active' or 'completed'
+  periods: (HistoricalPeriod | Period)[];
 
   // Period confirmation settings
   periodConfirmationGraceDays: number; // Default: 3
@@ -154,6 +166,21 @@ export interface BudgetConfig {
   // Savings sweep settings
   autoSweepEnabled?: boolean;
   sweepTrigger?: SweepTrigger;
+}
+
+/**
+ * Type guard to check if a period is a static Period (new model).
+ * Static periods have 'transactions' array and no 'periodNumber'.
+ */
+export function isStaticPeriod(period: HistoricalPeriod | Period): period is Period {
+  return 'transactions' in period && Array.isArray((period as Period).transactions);
+}
+
+/**
+ * Type guard to check if a period is a HistoricalPeriod (legacy model).
+ */
+export function isHistoricalPeriod(period: HistoricalPeriod | Period): period is HistoricalPeriod {
+  return 'periodNumber' in period && typeof (period as HistoricalPeriod).periodNumber === 'number';
 }
 
 export interface ProjectionEntry {
