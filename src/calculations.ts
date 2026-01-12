@@ -12,8 +12,11 @@ import type {
   ExpenseOccurrence,
   PeriodSpendEntry,
   HistoricalPeriod,
+  Period,
 } from './types';
 import { warnIf } from './utils/invariants';
+import { generateUUID } from './utils/uuid';
+import { getEffectiveStartingBalance } from './periods';
 
 // Convert frequency to monthly multiplier
 const FREQ_TO_MONTHLY: Record<PayFrequency | ExpenseFrequency, number> = {
@@ -395,16 +398,22 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
 
   if (futurePayDates.length === 0) return entries;
 
+  // Check for active period in static periods model
+  // Note: config.periods is typed as HistoricalPeriod[] but may contain Period objects after migration
+  const staticPeriods = config.periods as unknown as Period[];
+  const activePeriod = staticPeriods?.find(p => p.status === 'active');
+
   // Calculate period 0 start date
-  // Priority: periodStartSnapshot (actual current period start) > currentBalanceAsOf > budgetStartDate > today
-  // budgetStartDate is for historical reference only - NOT for current period boundaries
-  const period0Start = config.periodStartSnapshot?.periodStartDate
-    ? parseISO(config.periodStartSnapshot.periodStartDate)
-    : config.currentBalanceAsOf
-      ? parseISO(config.currentBalanceAsOf)
-      : config.budgetStartDate
-        ? parseISO(config.budgetStartDate)
-        : today;
+  // Priority: active period > periodStartSnapshot > currentBalanceAsOf > budgetStartDate > today
+  const period0Start = activePeriod?.startDate
+    ? parseISO(activePeriod.startDate)
+    : config.periodStartSnapshot?.periodStartDate
+      ? parseISO(config.periodStartSnapshot.periodStartDate)
+      : config.currentBalanceAsOf
+        ? parseISO(config.currentBalanceAsOf)
+        : config.budgetStartDate
+          ? parseISO(config.budgetStartDate)
+          : today;
 
   // Pre-generate all expense occurrences for the entire projection range
   const projectionEnd = addMonths(futurePayDates[futurePayDates.length - 1], 1);
@@ -414,7 +423,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
     projectionEnd
   );
 
-  // Track balances - start from current balance
+  // Track balances - start from active period or current balance
   let balanceAfterIncome = config.currentBalance;
   let balanceAfterExpenses = config.currentBalance;
   let balanceAfterBaseline = config.currentBalance;
@@ -426,40 +435,88 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
   const completedPeriods = config.periods?.filter(p => p.status === 'completed') ?? [];
   let cumulativeSavings = completedPeriods.reduce((sum, p) => sum + (p.savingsSwept ?? 0), 0);
 
-  // === PERIOD 0: Balance Entry Date → Next Paycheck (partial period) ===
-  // period0Start is already calculated above (from currentBalanceAsOf or today)
+  // === PERIOD 0: Active Period / Current Period ===
   const nextPayDate = futurePayDates[0];
   const daysUntilNextPay = differenceInDays(nextPayDate, period0Start);
 
-  // Only add partial period if there are days before next paycheck
+  // Only add period 0 if there are days before next paycheck
   if (daysUntilNextPay > 0) {
-    // Get expenses between balance entry date and next paycheck (exclusive of pay date)
-    const partialPeriodExpenses = getExpensesBetweenDates(
-      allExpenseOccurrences,
-      period0Start,
-      addDays(nextPayDate, -1)
-    );
-    const partialExpenseTotal = partialPeriodExpenses.reduce((sum, e) => sum + e.amount, 0);
+    let period0Income: number;
+    let partialExpenseTotal: number;
+    let partialPeriodExpenses: ExpenseOccurrence[];
+    let period0AdHocIncome: number;
+    let period0AdHocExpense: number;
+    let period0AdHocs: typeof config.adHocTransactions;
+    let startingBalance: number;
 
-    // Get ad-hoc transactions for period 0
-    // Match by periodStartDate (immutable) if available, otherwise fall back to periodNumber
-    const adHocTransactions = config.adHocTransactions ?? [];
-    const period0StartStr = format(period0Start, 'yyyy-MM-dd');
-    const period0AdHocs = adHocTransactions.filter(t => {
-      if (t.periodStartDate) {
-        return t.periodStartDate === period0StartStr;
+    if (activePeriod) {
+      // === STATIC PERIODS MODEL ===
+      // Read data directly from the active period
+      startingBalance = getEffectiveStartingBalance(activePeriod);
+      period0Income = activePeriod.income;
+
+      // Calculate expenses and adhoc from embedded transactions
+      const recurringExpenses = activePeriod.transactions.filter(t => t.type === 'recurring' && !t.isIncome);
+      const adhocExpenses = activePeriod.transactions.filter(t => t.type === 'adhoc' && !t.isIncome);
+      const adhocIncome = activePeriod.transactions.filter(t => t.type === 'adhoc' && t.isIncome);
+
+      partialExpenseTotal = recurringExpenses.reduce((sum, t) => sum + t.amount, 0);
+      period0AdHocExpense = adhocExpenses.reduce((sum, t) => sum + t.amount, 0);
+      period0AdHocIncome = adhocIncome.reduce((sum, t) => sum + t.amount, 0);
+
+      // Convert transactions to ExpenseOccurrence for compatibility
+      partialPeriodExpenses = recurringExpenses.map(t => ({
+        expenseId: t.recurringExpenseId ?? t.id,
+        name: t.name,
+        amount: t.amount,
+        date: parseISO(t.date),
+      }));
+
+      // Convert adhoc to legacy format for compatibility
+      period0AdHocs = activePeriod.transactions
+        .filter(t => t.type === 'adhoc')
+        .map(t => ({
+          id: t.id,
+          periodNumber: 0,
+          periodStartDate: activePeriod.startDate,
+          name: t.name,
+          amount: t.amount,
+          isIncome: t.isIncome,
+        }));
+
+      // Use active period's cumulative savings if available
+      if (activePeriod.cumulativeSavings !== undefined) {
+        cumulativeSavings = activePeriod.cumulativeSavings;
       }
-      return t.periodNumber === 0;
-    });
-    const period0AdHocIncome = period0AdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
-    const period0AdHocExpense = period0AdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
+    } else {
+      // === LEGACY MODEL (backward compatibility) ===
+      // Get expenses between balance entry date and next paycheck (exclusive of pay date)
+      partialPeriodExpenses = getExpensesBetweenDates(
+        allExpenseOccurrences,
+        period0Start,
+        addDays(nextPayDate, -1)
+      );
+      partialExpenseTotal = partialPeriodExpenses.reduce((sum, e) => sum + e.amount, 0);
 
-    // Check if current period received a paycheck (explicit flag, not inferred)
-    const paycheckReceived = config.periodStartSnapshot?.paycheckReceived ?? false;
-    const period0Income = paycheckReceived ? config.paycheckAmount : 0;
+      // Get ad-hoc transactions for period 0
+      const adHocTransactions = config.adHocTransactions ?? [];
+      const period0StartStr = format(period0Start, 'yyyy-MM-dd');
+      period0AdHocs = adHocTransactions.filter(t => {
+        if (t.periodStartDate) {
+          return t.periodStartDate === period0StartStr;
+        }
+        return t.periodNumber === 0;
+      });
+      period0AdHocIncome = period0AdHocs.filter(t => t.isIncome).reduce((sum, t) => sum + t.amount, 0);
+      period0AdHocExpense = period0AdHocs.filter(t => !t.isIncome).reduce((sum, t) => sum + t.amount, 0);
 
-    // Use snapshot balance (before paycheck) as starting point if available
-    const startingBalance = config.periodStartSnapshot?.balanceBeforePaycheck ?? config.currentBalance;
+      // Check if current period received a paycheck (explicit flag, not inferred)
+      const paycheckReceived = config.periodStartSnapshot?.paycheckReceived ?? false;
+      period0Income = paycheckReceived ? config.paycheckAmount : 0;
+
+      // Use snapshot balance (before paycheck) as starting point if available
+      startingBalance = config.periodStartSnapshot?.balanceBeforePaycheck ?? config.currentBalance;
+    }
 
     // Calculate balances
     balanceAfterIncome = startingBalance + period0Income + period0AdHocIncome;
@@ -498,7 +555,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
 
     entries.push({
       date: nextPayDate,                 // Period end date (next paycheck)
-      startDate: period0Start,           // Actual period start (budgetStartDate/currentBalanceAsOf/today)
+      startDate: period0Start,           // Actual period start
       periodNumber: 0,  // Special "current" period
       income: period0Income,
       expenses: partialExpenseTotal,
@@ -629,7 +686,71 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
 }
 
 /**
- * Find when balance crosses goal threshold in each scenario
+ * Calculate average net change per period from projection data.
+ * Uses regular periods (skipping period 0) to get representative rate.
+ */
+function calculateNetRateFromProjection(
+  projection: ProjectionEntry[],
+  sampleSize: number = 12
+): { afterIncome: number; afterExpenses: number; afterBaseline: number } {
+  // Filter to regular periods (not period 0) and take first N
+  const regularPeriods = projection.filter(p => p.periodNumber > 0).slice(0, sampleSize);
+
+  if (regularPeriods.length < 2) {
+    return { afterIncome: 0, afterExpenses: 0, afterBaseline: 0 };
+  }
+
+  // Calculate period-over-period changes
+  let sumAfterIncome = 0;
+  let sumAfterExpenses = 0;
+  let sumAfterBaseline = 0;
+
+  for (let i = 1; i < regularPeriods.length; i++) {
+    const prev = regularPeriods[i - 1];
+    const curr = regularPeriods[i];
+    sumAfterIncome += curr.balanceAfterIncome - prev.balanceAfterIncome;
+    sumAfterExpenses += curr.balanceAfterExpenses - prev.balanceAfterExpenses;
+    sumAfterBaseline += curr.balanceAfterBaseline - prev.balanceAfterBaseline;
+  }
+
+  const count = regularPeriods.length - 1;
+  return {
+    afterIncome: sumAfterIncome / count,
+    afterExpenses: sumAfterExpenses / count,
+    afterBaseline: sumAfterBaseline / count,
+  };
+}
+
+/**
+ * Estimate goal date based on current balance, goal, and net rate.
+ * Returns null if not achievable (zero/negative net rate).
+ */
+function estimateGoalDate(
+  currentBalance: number,
+  goal: number,
+  netPerPeriod: number,
+  lastProjectedDate: Date,
+  avgDaysPerPeriod: number
+): { date: Date; periods: number } | null {
+  if (netPerPeriod <= 0) {
+    return null; // Not achievable
+  }
+
+  const remaining = goal - currentBalance;
+  if (remaining <= 0) {
+    return { date: new Date(), periods: 0 }; // Already reached
+  }
+
+  const periodsNeeded = Math.ceil(remaining / netPerPeriod);
+  const daysNeeded = Math.ceil(periodsNeeded * avgDaysPerPeriod);
+  const estimatedDate = addDays(lastProjectedDate, daysNeeded);
+
+  return { date: estimatedDate, periods: periodsNeeded };
+}
+
+/**
+ * Find when balance crosses goal threshold in each scenario.
+ * If goal not found in projection, uses mathematical estimation.
  */
 export function calculateGoalDates(
   config: BudgetConfig,
@@ -639,6 +760,12 @@ export function calculateGoalDates(
   let dateAfterExpenses: Date | null = null;
   let dateAfterBaseline: Date | null = null;
   let periodsToGoal = 0;
+
+  // Track if dates are estimates (beyond projection window)
+  let isEstimateBeforeExpenses = false;
+  let isEstimateAfterExpenses = false;
+  let isEstimateAfterBaseline = false;
+  let unreachableReason: 'negative_net' | 'zero_net' | null = null;
 
   // Handle case where no savings goal is set
   if (config.savingsGoal <= 0) {
@@ -651,6 +778,7 @@ export function calculateGoalDates(
     };
   }
 
+  // First pass: find dates within projection
   for (const entry of projection) {
     // Skip partial period (Period 0) - goal should only be based on full periods
     if (entry.periodNumber === 0) continue;
@@ -669,6 +797,69 @@ export function calculateGoalDates(
     }
   }
 
+  // Second pass: estimate any missing dates mathematically
+  const regularPeriods = projection.filter(p => p.periodNumber > 0);
+  if (regularPeriods.length > 0 && (dateBeforeExpenses === null || dateAfterExpenses === null || dateAfterBaseline === null)) {
+    const avgNet = calculateNetRateFromProjection(projection);
+
+    // Calculate average days per period from projection
+    const avgDaysPerPeriod = regularPeriods.length >= 2
+      ? differenceInDays(regularPeriods[regularPeriods.length - 1].startDate, regularPeriods[0].startDate) / (regularPeriods.length - 1)
+      : 14; // fallback to ~biweekly
+
+    const lastEntry = regularPeriods[regularPeriods.length - 1];
+    const lastDate = lastEntry.startDate;
+
+    // Estimate afterIncome date if not found
+    if (dateBeforeExpenses === null) {
+      const estimate = estimateGoalDate(
+        lastEntry.balanceAfterIncome,
+        config.savingsGoal,
+        avgNet.afterIncome,
+        lastDate,
+        avgDaysPerPeriod
+      );
+      if (estimate) {
+        dateBeforeExpenses = estimate.date;
+        isEstimateBeforeExpenses = true;
+      }
+    }
+
+    // Estimate afterExpenses date if not found
+    if (dateAfterExpenses === null) {
+      const estimate = estimateGoalDate(
+        lastEntry.balanceAfterExpenses,
+        config.savingsGoal,
+        avgNet.afterExpenses,
+        lastDate,
+        avgDaysPerPeriod
+      );
+      if (estimate) {
+        dateAfterExpenses = estimate.date;
+        isEstimateAfterExpenses = true;
+      }
+    }
+
+    // Estimate afterBaseline date if not found
+    if (dateAfterBaseline === null) {
+      const estimate = estimateGoalDate(
+        lastEntry.balanceAfterBaseline,
+        config.savingsGoal,
+        avgNet.afterBaseline,
+        lastDate,
+        avgDaysPerPeriod
+      );
+      if (estimate) {
+        dateAfterBaseline = estimate.date;
+        isEstimateAfterBaseline = true;
+        periodsToGoal = lastEntry.periodNumber + estimate.periods;
+      } else {
+        // Determine why it's unreachable
+        unreachableReason = avgNet.afterBaseline < 0 ? 'negative_net' : 'zero_net';
+      }
+    }
+  }
+
   const today = new Date();
   const daysToGoal = dateAfterBaseline
     ? differenceInDays(dateAfterBaseline, today)
@@ -680,6 +871,10 @@ export function calculateGoalDates(
     dateAfterBaseline,
     periodsToGoal,
     daysToGoal,
+    isEstimateBeforeExpenses,
+    isEstimateAfterExpenses,
+    isEstimateAfterBaseline,
+    unreachableReason,
   };
 }
 
@@ -877,10 +1072,25 @@ export function handlePeriodTransition(
   if (config.periodStartSnapshot) {
     const startingBalance = config.periodStartSnapshot.balanceBeforePaycheck;
 
-    // Calculate what the projected ending would have been
-    // Period 0 is partial period (no paycheck), so use its expense data
-    const income = currentPeriod.income;  // Should be 0 for period 0
-    const expenses = currentPeriod.expenses;
+    // Calculate expenses for the ACTUAL historical period dates
+    // (not from projection Period 0 which may cover a different range when detected late)
+    const historicalPeriodStart = parseISO(config.periodStartSnapshot.periodStartDate);
+    const historicalPeriodEnd = addDays(passedPayDate, -1);  // Exclusive of pay date
+
+    const allExpenseOccurrences = generateExpenseOccurrences(
+      config.recurringExpenses,
+      historicalPeriodStart,
+      passedPayDate
+    );
+    const periodExpenseOccurrences = allExpenseOccurrences.filter((occ) => {
+      const occDate = startOfDay(occ.date);
+      return !isBefore(occDate, startOfDay(historicalPeriodStart)) &&
+             !isAfter(occDate, startOfDay(historicalPeriodEnd));
+    });
+    const expenses = periodExpenseOccurrences.reduce((sum, e) => sum + e.amount, 0);
+
+    // Use income from projection (should be 0 for period 0, or paycheck amount for period with paycheck)
+    const income = currentPeriod.income;
     const adHocIncome = currentPeriod.adHocIncome;
     const adHocExpenses = currentPeriod.adHocExpenses;
 
@@ -1089,7 +1299,7 @@ export function createHistoricalPeriod(
   cumulativeSavings: number = 0
 ): HistoricalPeriod {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     periodNumber,
     startDate: startDate.toISOString().split('T')[0],
     endDate: endDate.toISOString().split('T')[0],
