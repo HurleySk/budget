@@ -384,8 +384,8 @@ export function Timeline({
 
                     {/* Running Balance Ledger */}
                     {(() => {
-                      // Calculate starting balance (balance before any transactions this period)
-                      const startingBalance = period.balanceAfterIncome - period.income - (period.adHocIncome ?? 0);
+                      // Use the starting balance directly from the projection
+                      const startingBalance = period.startingBalance;
                       let runningBalance = startingBalance;
 
                       // Pre-calculate all running balances

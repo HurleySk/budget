@@ -194,6 +194,7 @@ export interface ProjectionEntry {
   adHocExpenses: number;                // Total ad-hoc expenses for this period
   adHocDetails: AdHocTransaction[];     // Ad-hoc transactions for this period
   baselineSpend: number;
+  startingBalance: number;              // Balance at start of period
   balanceAfterIncome: number;
   balanceAfterExpenses: number;
   balanceAfterBaseline: number;

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { format } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import type { BudgetConfig, AdHocTransaction, Period, Transaction, HistoricalPeriod } from './types';
 import { DEFAULT_CONFIG, isHistoricalPeriod } from './types';
-import { generateProjection, calculateAverageBaseline, getPendingConfirmationPeriod, calculateGoalDates } from './calculations';
+import { generateProjection, calculateAverageBaseline, getPendingConfirmationPeriod, calculateGoalDates, generatePayDates } from './calculations';
 import { saveBudget, loadBudget } from './storage';
+import { generateRecurringTransactions, calculatePeriodEndingBalance } from './periods';
 import { PeriodDetail } from './components/PeriodDetail';
 import { BottomNav } from './components/BottomNav';
 import { Toast } from './components/Toast';
@@ -110,6 +111,9 @@ function App() {
 
   // Calculate projection (memoized) - recalculates when config or date changes
   const projection = useMemo(() => {
+    // Don't calculate until config is loaded to avoid warnings on default values
+    if (!isLoaded) return [];
+
     // currentDay is used to trigger recalculation at midnight
     void currentDay;
     // Use calculated baseline if enabled and we have enough data
@@ -126,7 +130,7 @@ function App() {
     }
 
     return generateProjection(config);
-  }, [config, currentDay]);
+  }, [config, currentDay, isLoaded]);
 
   // Get selected period data
   const selectedPeriodData = selectedPeriod !== null
@@ -222,18 +226,79 @@ function App() {
     }
   }, [getActivePeriod, updateActivePeriod]);
 
-  // Handle starting balance update from Timeline (any started period)
-  const handleUpdateStartingBalance = (periodNumber: number, balance: number) => {
-    const period = projection.find(p => p.periodNumber === periodNumber);
-    if (!period) return;
+  // Auto-transition to a new period when the active period has ended
+  const autoTransitionPeriod = useCallback((oldPeriod: Period) => {
+    // New period starts where old period ended (continuous timeline)
+    const newStartDateStr = oldPeriod.endDate;
+    const newStartDate = parseISO(newStartDateStr);
 
-    // Set currentBalance to the entered value, with asOf date = period start
-    setConfig(prev => ({
-      ...prev,
-      currentBalance: balance,
-      currentBalanceAsOf: format(period.startDate, 'yyyy-MM-dd'),
-    }));
-  };
+    // Find the next pay date after the new start
+    const payDates = generatePayDates(config, 5);
+    const newEndDate = payDates.find(d => d > newStartDate) ?? addDays(newStartDate, 14);
+    const newEndDateStr = format(newEndDate, 'yyyy-MM-dd');
+
+    // Calculate ending balance of old period
+    const calculatedEnding = calculatePeriodEndingBalance(oldPeriod);
+
+    // Generate recurring transactions for new period
+    const newTransactions = generateRecurringTransactions(
+      config.recurringExpenses,
+      newStartDateStr,
+      newEndDateStr
+    );
+
+    setConfig(prev => {
+      const periods = prev.periods as unknown as Period[];
+
+      // Mark old period as completed
+      const updatedPeriods = periods.map(p =>
+        p.id === oldPeriod.id ? { ...p, status: 'completed' as const } : p
+      );
+
+      // Create new active period
+      const newPeriod: Period = {
+        id: `period-${newStartDateStr}-${generateUUID().slice(0, 8)}`,
+        startDate: newStartDateStr,
+        endDate: newEndDateStr,
+        status: 'active',
+        calculatedStartingBalance: calculatedEnding,
+        income: prev.paycheckAmount,
+        transactions: newTransactions,
+        baselineSpend: prev.baselineSpendPerPeriod,
+      };
+
+      return {
+        ...prev,
+        periods: [...updatedPeriods, newPeriod] as unknown as typeof prev.periods,
+      };
+    });
+  }, [config]);
+
+  // Auto-transition periods when a new pay period starts
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    const activePeriod = getActivePeriod();
+    if (!activePeriod) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    if (today >= activePeriod.endDate) {
+      // Active period has ended - transition to new period
+      autoTransitionPeriod(activePeriod);
+    }
+  }, [isLoaded, currentDay, getActivePeriod, autoTransitionPeriod]);
+
+  // Handle starting balance update from Timeline
+  // With auto-transition, period 0 is always the current active period
+  const handleUpdateStartingBalance = useCallback((periodNumber: number, balance: number) => {
+    if (periodNumber === 0) {
+      updateActivePeriod(period => ({
+        ...period,
+        actualStartingBalance: balance,
+      }));
+    }
+    // Period 1+ edits would require pre-generating future periods (not implemented)
+  }, [updateActivePeriod]);
 
   // Handle starting balance update from user
   // In static periods model, this sets actualStartingBalance on the active period

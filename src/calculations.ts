@@ -565,6 +565,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       adHocExpenses: period0AdHocExpense,
       adHocDetails: period0AdHocs,
       baselineSpend: effectiveBaseline,
+      startingBalance,
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
@@ -582,6 +583,9 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
   for (let i = 0; i < futurePayDates.length; i++) {
     const periodDate = futurePayDates[i];
     const periodNumber = i + 1;
+
+    // Starting balance for this period is previous period's ending balance
+    const periodStartingBalance = balanceAfterBaseline;
 
     // Period boundaries: this payday (inclusive) to next payday (exclusive)
     const periodStart = periodDate;
@@ -661,6 +665,7 @@ export function generateProjection(config: BudgetConfig, baselineOverride?: numb
       adHocExpenses: adHocExpenseTotal,
       adHocDetails: periodAdHocs,
       baselineSpend: effectiveBaseline,
+      startingBalance: periodStartingBalance,
       balanceAfterIncome,
       balanceAfterExpenses,
       balanceAfterBaseline,
