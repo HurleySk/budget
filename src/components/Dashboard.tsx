@@ -375,6 +375,8 @@ export function Dashboard({
                   <p className="text-sm text-warning-600">
                     {goalDates.unreachableReason === 'negative_net'
                       ? 'Spending exceeds income'
+                      : goalDates.unreachableReason === 'sweep_limit'
+                      ? 'Goal above sweep threshold'
                       : 'Adjust budget to reach goal'}
                   </p>
                 ) : null}

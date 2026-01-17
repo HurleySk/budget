@@ -213,7 +213,7 @@ export interface GoalProjection {
   isEstimateAfterExpenses?: boolean;
   isEstimateAfterBaseline?: boolean;
   // Reason if goal is unreachable (null if reachable)
-  unreachableReason?: 'negative_net' | 'zero_net' | null;
+  unreachableReason?: 'negative_net' | 'zero_net' | 'sweep_limit' | null;
 }
 
 export const DEFAULT_CONFIG: BudgetConfig = {

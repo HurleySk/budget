@@ -771,7 +771,7 @@ export function calculateGoalDates(
   let isEstimateBeforeExpenses = false;
   let isEstimateAfterExpenses = false;
   let isEstimateAfterBaseline = false;
-  let unreachableReason: 'negative_net' | 'zero_net' | null = null;
+  let unreachableReason: 'negative_net' | 'zero_net' | 'sweep_limit' | null = null;
 
   // Handle case where no savings goal is set
   if (config.savingsGoal <= 0) {
@@ -862,6 +862,36 @@ export function calculateGoalDates(
       } else {
         // Determine why it's unreachable
         unreachableReason = avgNet.afterBaseline < 0 ? 'negative_net' : 'zero_net';
+      }
+    }
+  }
+
+  // Check if goal is achievable given sweep trigger limits
+  // When sweep happens earlier than the balance view being checked, the max possible
+  // balance is limited (e.g., sweep at afterExpenses caps afterBaseline at goal - baseline)
+  if (config.autoSweepEnabled && unreachableReason === null) {
+    const sweepTrigger = config.sweepTrigger ?? 'afterBaseline';
+    const regularPeriods = projection.filter(p => p.periodNumber > 0);
+
+    if (regularPeriods.length > 0) {
+      // Calculate average expenses and baseline from projection
+      const avgExpenses = regularPeriods.reduce((sum, p) => sum + p.expenses, 0) / regularPeriods.length;
+      const avgBaseline = regularPeriods.reduce((sum, p) => sum + p.baselineSpend, 0) / regularPeriods.length;
+
+      // Calculate max possible balanceAfterBaseline with this sweep trigger
+      let maxAfterBaseline: number;
+      if (sweepTrigger === 'afterBaseline') {
+        maxAfterBaseline = config.savingsGoal; // Can reach goal exactly
+      } else if (sweepTrigger === 'afterExpenses') {
+        maxAfterBaseline = config.savingsGoal - avgBaseline;
+      } else { // afterIncome
+        maxAfterBaseline = config.savingsGoal - avgExpenses - avgBaseline;
+      }
+
+      if (config.savingsGoal > maxAfterBaseline) {
+        // Clear any estimated date since it's actually unreachable
+        dateAfterBaseline = null;
+        unreachableReason = 'sweep_limit';
       }
     }
   }
